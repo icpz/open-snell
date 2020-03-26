@@ -19,17 +19,7 @@
 
 #include <string_view>
 
-#include <asio/ip/tcp.hpp>
+#include "obfs.hh"
 
-#include "obfs/obfs.hh"
-
-class SnellServerSession {
-public:
-    virtual ~SnellServerSession() = default;
-
-    virtual void Start() = 0;
-
-    static std::shared_ptr<SnellServerSession> \
-        New(asio::ip::tcp::socket socket, std::string_view psk, std::shared_ptr<Obfuscator> obfs);
-};
-
+std::shared_ptr<Obfuscator>
+    NewTlsObfs(std::string_view host);

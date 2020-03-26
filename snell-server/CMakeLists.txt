@@ -14,6 +14,8 @@ list(APPEND SRCS
     src/crypto/chacha20_poly1305_ietf_cipher.cc
     src/crypto/aes_gcm_cipher.cc
     src/crypto/crypto_context.cc
+    src/obfs/http.cc
+    src/obfs/tls.cc
     )
 
 list(APPEND DEPS

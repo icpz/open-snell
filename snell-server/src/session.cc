@@ -62,8 +62,18 @@ class SnellServerSessionImpl :
     enum { BUF_SIZE = 8192 };
 
 public:
-    SnellServerSessionImpl(asio::ip::tcp::socket socket, std::shared_ptr<Cipher> cipher, std::string_view psk)
-        : executor_{socket.get_executor()}, client_{std::move(socket)}, target_{executor_}, resolver_{executor_} {
+    SnellServerSessionImpl(
+        asio::ip::tcp::socket socket,
+        std::shared_ptr<Cipher> cipher,
+        std::string_view psk,
+        std::shared_ptr<Obfuscator> obfs = nullptr
+    )
+        : executor_{socket.get_executor()},
+          client_{std::move(socket)},
+          target_{executor_},
+          resolver_{executor_},
+          obfs_{obfs}
+    {
         endpoint_ = client_.socket.remote_endpoint();
         enc_ctx_  = std::make_shared<CryptoContext>(cipher, psk);
         dec_ctx_  = std::make_shared<CryptoContext>(cipher, psk);
@@ -115,11 +125,24 @@ private:
                 }
                 co_return ERROR;
             }
+
+            if (obfs_) {
+                ret = obfs_->DeObfsRequest(buf, nbytes);
+                if (ret < 0) {
+                    SPDLOG_ERROR("session handshake deobfs failed {}", endpoint_);
+                    co_return ERROR;
+                } else if (ret == 0) {
+                    SPDLOG_TRACE("session handshake deobfs need more {}", endpoint_);
+                    continue;
+                }
+                nbytes = ret;
+            }
             ret = dec_ctx_->DecryptSome(plain, buf, nbytes, has_zero_chunk);
             if (ret) {
                 SPDLOG_ERROR("session handshake decrypt failed {}", endpoint_);
                 co_return ERROR;
             }
+
             uint8_t *phead = plain.data();
             size_t remained_size = plain.size();
             if (remained_size < 4) {
@@ -240,6 +263,7 @@ private:
             } else if (cmd == 0x00) {
                 SPDLOG_DEBUG("session sending pong back {}", endpoint_);
                 co_await DoSendPongBack();
+                continue;
             } else {
                 SPDLOG_ERROR("session unknown command {}, {:x}", endpoint_, cmd);
                 break;
@@ -270,22 +294,36 @@ private:
                     break;
                 }
             }
+
+            if (obfs_) {
+                ret = obfs_->DeObfsRequest(buf, nbytes);
+                if (ret < 0) {
+                    SPDLOG_ERROR("session forward c2s deobfs failed {}", endpoint_);
+                    break;
+                } else if (ret == 0) {
+                    SPDLOG_TRACE("session forward c2s deobfs need more {}", endpoint_);
+                    continue;
+                }
+                nbytes = ret;
+            }
             ret = dec_ctx_->DecryptSome(client_.buffer, buf, nbytes, has_zero_chunk);
             if (ret) {
                 SPDLOG_ERROR("session decrypt client error {}", endpoint_);
                 break;
             }
 
-            co_await asio::async_write(
-                target_.socket,
-                asio::buffer(client_.buffer),
-                asio::redirect_error(asio::use_awaitable, ec)
-            );
-            if (ec) {
-                SPDLOG_ERROR("session target write error {}, {}", endpoint_, ec.message());
-                break;
+            if (!client_.buffer.empty()) {
+                co_await asio::async_write(
+                    target_.socket,
+                    asio::buffer(client_.buffer),
+                    asio::redirect_error(asio::use_awaitable, ec)
+                );
+                if (ec) {
+                    SPDLOG_ERROR("session target write error {}, {}", endpoint_, ec.message());
+                    break;
+                }
+                client_.buffer.clear();
             }
-            client_.buffer.clear();
             if (has_zero_chunk || client_.shutdown_after_forward) {
                 SPDLOG_DEBUG("session terminates forwarding c2s {}", endpoint_);
                 break;
@@ -336,6 +374,9 @@ private:
                 SPDLOG_ERROR("session encrypt target error {}", endpoint_);
                 break;
             }
+            if (obfs_) {
+                obfs_->ObfsResponse(target_.buffer);
+            }
 
             co_await asio::async_write(
                 client_.socket,
@@ -379,6 +420,9 @@ private:
             SPDLOG_ERROR("session encrypt error message error {}", endpoint_);
             goto __clean_up;
         }
+        if (obfs_) {
+            obfs_->ObfsResponse(target_.buffer);
+        }
 
         co_await asio::async_write(
             client_.socket, asio::buffer(target_.buffer),
@@ -401,6 +445,9 @@ private:
             SPDLOG_ERROR("session encrypt pong error {}", endpoint_);
             co_return;
         }
+        if (obfs_) {
+            obfs_->ObfsResponse(target_.buffer);
+        }
 
         co_await asio::async_write(
             client_.socket, asio::buffer(target_.buffer),
@@ -418,13 +465,14 @@ private:
     asio::ip::tcp::endpoint endpoint_;
     std::shared_ptr<CryptoContext> enc_ctx_;
     std::shared_ptr<CryptoContext> dec_ctx_;
+    std::shared_ptr<Obfuscator> obfs_;
     std::string current_uid_;
     int ongoing_stream_;
 };
 
 std::shared_ptr<SnellServerSession> \
-SnellServerSession::New(asio::ip::tcp::socket socket, std::string_view psk) {
+SnellServerSession::New(asio::ip::tcp::socket socket, std::string_view psk, std::shared_ptr<Obfuscator> obfs) {
     static auto cipher = NewAes128Gcm();
-    return std::make_shared<SnellServerSessionImpl>(std::move(socket), cipher, psk);
+    return std::make_shared<SnellServerSessionImpl>(std::move(socket), cipher, psk, obfs);
 }
 

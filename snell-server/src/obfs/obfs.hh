@@ -17,19 +17,21 @@
 
 #pragma once
 
-#include <string_view>
+#include <stdint.h>
+#include <vector>
+#include <memory>
 
-#include <asio/ip/tcp.hpp>
-
-#include "obfs/obfs.hh"
-
-class SnellServerSession {
+class Obfuscator {
 public:
-    virtual ~SnellServerSession() = default;
+    virtual ~Obfuscator() = default;
 
-    virtual void Start() = 0;
+    virtual int ObfsRequest(std::vector<uint8_t> &buf) = 0;
+    virtual int DeObfsResponse(uint8_t *buf, int len) = 0;
 
-    static std::shared_ptr<SnellServerSession> \
-        New(asio::ip::tcp::socket socket, std::string_view psk, std::shared_ptr<Obfuscator> obfs);
+    virtual int ObfsResponse(std::vector<uint8_t> &buf) = 0;
+    virtual int DeObfsRequest(uint8_t *buf, int len) = 0;
+
+    virtual std::shared_ptr<Obfuscator> Duplicate() const = 0;
+
 };
 
