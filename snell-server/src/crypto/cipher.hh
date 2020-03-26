@@ -24,7 +24,7 @@ class Cipher {
 public:
     enum { TAG_SIZE = 16 };
 
-    virtual ~Cipher() { }
+    virtual ~Cipher() = default;
 
     virtual int Encrypt(uint8_t *ctext, size_t *clen, const uint8_t *ptext, size_t plen, const uint8_t *nonce, const uint8_t *key) const = 0;
     virtual int Decrypt(uint8_t *ptext, size_t *plen, const uint8_t *ctext, size_t clen, const uint8_t *nonce, const uint8_t *key) const = 0;
