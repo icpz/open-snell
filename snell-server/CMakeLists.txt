@@ -2,15 +2,11 @@ cmake_minimum_required(VERSION 3.13)
 project(snell-server)
 
 if (APPLE)
-    set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
+    set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl@1.1")
 endif (APPLE)
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
-find_package(OpenSSL 1.0.2 REQUIRED)
-
-if(${OPENSSL_VERSION} VERSION_GREATER_EQUAL 1.1)
-    message(FATAL_ERROR "libcrypto too new, require <= 1.0.2")
-endif()
+find_package(OpenSSL 1.1 REQUIRED)
 
 list(APPEND SRCS
     src/server.cc
