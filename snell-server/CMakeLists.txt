@@ -15,9 +15,9 @@ endif()
 list(APPEND SRCS
     src/server.cc
     src/session.cc
-    src/chacha20_poly1305_ietf_cipher.cc
-    src/aes_gcm_cipher.cc
-    src/crypto_context.cc
+    src/crypto/chacha20_poly1305_ietf_cipher.cc
+    src/crypto/aes_gcm_cipher.cc
+    src/crypto/crypto_context.cc
     )
 
 list(APPEND DEPS

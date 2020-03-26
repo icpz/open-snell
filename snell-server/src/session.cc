@@ -24,8 +24,8 @@
 #include <spdlog/fmt/ostr.h>
 
 #include "session.hh"
-#include "crypto_context.hh"
-#include "aes_gcm_cipher.hh"
+#include "crypto/crypto_context.hh"
+#include "crypto/aes_gcm_cipher.hh"
 
 template<typename OStream>
 OStream &operator<<(OStream &os, const asio::ip::tcp::endpoint &ep) {
