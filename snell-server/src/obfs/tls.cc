@@ -15,6 +15,8 @@
  * along with open-snell.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include <arpa/inet.h>
+
 #include <stdint.h>
 #include <algorithm>
 #include <random>
