@@ -17,23 +17,27 @@ Only supports unix-like operating system.
 ## Requirements
 
 + [cmake](https://cmake.org) 3.13+
-+ clang 5.0+
-+ libsodium
++ clang 7.0+
++ libc++ 7.0+
++ libsodium 1.0.17+
 + openssl 1.1+
 
 ## Build Steps
 
-Only tested on macOS currently.
+Only tested on macOS and Debian 9 currently.
 
 ```bash
 
 # clone and enter the repo
 
+# if linux:
+#export CC=clang CXX=clang++ CXXFLAGS=-stdlib=libc++
+
 mkdir -p build && cd build
 
 cmake -DCMAKE_BUILD_TYPE=Release ..
 
-make 
+make
 
 ```
 
