@@ -21,8 +21,7 @@
 
 class Chacha20Poly1305IetfCipher : public Cipher {
 public:
-    virtual ~Chacha20Poly1305IetfCipher() {
-    }
+    virtual ~Chacha20Poly1305IetfCipher() = default;
 
     int Encrypt(uint8_t *c, size_t *clen, const uint8_t *ptext, size_t plen, const uint8_t *nonce, const uint8_t *key) const {
         unsigned long long clenll;

@@ -28,7 +28,7 @@ const size_t CHUNK_MAX_SIZE = 0x3FFFU;
 const size_t TAG_SIZE = 16U;
 
 CryptoContext::CryptoContext(std::shared_ptr<Cipher> cipher, std::string_view psk)
-    : cipher_(cipher), psk_(psk),
+    : cipher_{cipher}, psk_{psk},
       key_(cipher->KeySize()), nonce_(cipher->NonceSize()) {
     state_ = 0;
 }
