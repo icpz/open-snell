@@ -15,7 +15,6 @@
  * along with open-snell.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-
 #include <utility>
 #include <string_view>
 
@@ -26,6 +25,7 @@
 #include "session.hh"
 #include "crypto/crypto_context.hh"
 #include "crypto/aes_gcm_cipher.hh"
+#include "crypto/chacha20_poly1305_ietf_cipher.hh"
 
 template<typename OStream>
 OStream &operator<<(OStream &os, const asio::ip::tcp::endpoint &ep) {
@@ -65,6 +65,7 @@ public:
     SnellServerSessionImpl(
         asio::ip::tcp::socket socket,
         std::shared_ptr<Cipher> cipher,
+        std::shared_ptr<Cipher> fallback,
         std::string_view psk,
         std::shared_ptr<Obfuscator> obfs = nullptr
     )
@@ -75,8 +76,7 @@ public:
           obfs_{obfs}
     {
         endpoint_ = client_.socket.remote_endpoint();
-        enc_ctx_  = std::make_shared<CryptoContext>(cipher, psk);
-        dec_ctx_  = std::make_shared<CryptoContext>(cipher, psk);
+        crypto_ctx_ = CryptoContext::New(cipher, psk, fallback);
         SPDLOG_DEBUG("session opened {}", endpoint_);
     }
 
@@ -137,7 +137,7 @@ private:
                 }
                 nbytes = ret;
             }
-            ret = dec_ctx_->DecryptSome(plain, buf, nbytes, has_zero_chunk);
+            ret = crypto_ctx_->DecryptSome(plain, buf, nbytes, has_zero_chunk);
             if (ret) {
                 SPDLOG_ERROR("session handshake decrypt failed {}", endpoint_);
                 co_return ERROR;
@@ -156,11 +156,16 @@ private:
             }
 
             if (phead[1] == 0x00) { // ping
-                SPDLOG_ERROR("session unimplemented ping command {}", endpoint_);
+                SPDLOG_DEBUG("session ping command {}", endpoint_);
                 cmd = 0x00;
                 co_return OK;
-            } else if (phead[1] == 0x05) { // connect
-                cmd = 0x05;
+            } else if (phead[1] == 0x05 || phead[1] == 0x01) { // connect
+                cmd = phead[1];
+                SPDLOG_DEBUG("session connect command {}", endpoint_);
+                if (cmd == 0x01) {
+                    SPDLOG_INFO("session snell v1 {}", endpoint_);
+                    snell_v2_ = false;
+                }
             } else {
                 SPDLOG_ERROR("session unsupported command {}, {:x}", endpoint_, phead[1]);
                 co_return ERROR;
@@ -220,7 +225,7 @@ private:
                 co_return;
             }
             SPDLOG_TRACE("session cmd {}, {:x}", endpoint_, cmd);
-            if (cmd == 0x05) {
+            if (cmd == 0x05 || cmd == 0x01) {
                 auto resolve_results = co_await \
                     resolver_.async_resolve(
                         host, std::to_string(port),
@@ -230,7 +235,11 @@ private:
                 if (ec) {
                     SPDLOG_ERROR("session failed to resolve {}, [{}]:{}, {}", endpoint_, host, port, ec.message());
                     co_await DoWriteErrorBack(ec);
-                    continue;
+                    if (snell_v2_) {
+                        continue;
+                    } else {
+                        break;
+                    }
                 }
 
                 auto remote_endpoint = co_await \
@@ -242,7 +251,11 @@ private:
                 if (ec) {
                     SPDLOG_ERROR("session failed to connect {}, [{}]:{}, {}", endpoint_, host, port, ec.message());
                     co_await DoWriteErrorBack(ec);
-                    continue;
+                    if (snell_v2_) {
+                        continue;
+                    } else {
+                        break;
+                    }
                 }
                 SPDLOG_INFO("session connected to target {}->{}", endpoint_, remote_endpoint);
 
@@ -259,11 +272,10 @@ private:
                 );
 
                 break;
-                SPDLOG_INFO("session bidirection terminates {}", endpoint_);
             } else if (cmd == 0x00) {
                 SPDLOG_DEBUG("session sending pong back {}", endpoint_);
                 co_await DoSendPongBack();
-                continue;
+                break;
             } else {
                 SPDLOG_ERROR("session unknown command {}, {:x}", endpoint_, cmd);
                 break;
@@ -290,7 +302,11 @@ private:
                         asio::redirect_error(asio::use_awaitable, ec)
                     );
                 if (ec) {
-                    SPDLOG_ERROR("session client read error {}, {}", endpoint_, ec.message());
+                    if (snell_v2_ || ec != asio::error::eof) {
+                        SPDLOG_ERROR("session client read error {}, {}", endpoint_, ec.message());
+                    } else {
+                        SPDLOG_INFO("session client read meets eof {}", endpoint_);
+                    }
                     break;
                 }
             }
@@ -306,7 +322,7 @@ private:
                 }
                 nbytes = ret;
             }
-            ret = dec_ctx_->DecryptSome(client_.buffer, buf, nbytes, has_zero_chunk);
+            ret = crypto_ctx_->DecryptSome(client_.buffer, buf, nbytes, has_zero_chunk);
             if (ret) {
                 SPDLOG_ERROR("session decrypt client error {}", endpoint_);
                 break;
@@ -334,7 +350,7 @@ private:
             SPDLOG_WARN("session target shutdown send failed {}, {}", endpoint_, ec.message());
         }
         --ongoing_stream_;
-        if (!ongoing_stream_) {
+        if (snell_v2_ && !ongoing_stream_) {
             SPDLOG_INFO("session starts for new sub connection {}", endpoint_);
             Start();
         }
@@ -369,7 +385,7 @@ private:
             nbytes += bias;
             bias = 0;
 
-            ret = enc_ctx_->EncryptSome(target_.buffer, buf, nbytes, add_zero_chunk);
+            ret = crypto_ctx_->EncryptSome(target_.buffer, buf, nbytes, add_zero_chunk && snell_v2_);
             if (ret) {
                 SPDLOG_ERROR("session encrypt target error {}", endpoint_);
                 break;
@@ -398,7 +414,7 @@ private:
             SPDLOG_DEBUG("session target shutdown receive failed {}, {}", endpoint_, ec.message());
         }
         --ongoing_stream_;
-        if (!ongoing_stream_) {
+        if (snell_v2_ && !ongoing_stream_) {
             SPDLOG_INFO("session starts for new sub connection {}", endpoint_);
             Start();
         }
@@ -415,7 +431,7 @@ private:
         nbytes = 2 + static_cast<size_t>(buf[1]);
         SPDLOG_DEBUG("session write error back {}, {}", endpoint_, emsg);
 
-        int ret = enc_ctx_->EncryptSome(target_.buffer, buf, nbytes, true);
+        int ret = crypto_ctx_->EncryptSome(target_.buffer, buf, nbytes, true);
         if (ret) {
             SPDLOG_ERROR("session encrypt error message error {}", endpoint_);
             goto __clean_up;
@@ -440,7 +456,7 @@ private:
     asio::awaitable<void> DoSendPongBack() {
         uint8_t pong[1] = {0x00};
         asio::error_code ec;
-        int ret = enc_ctx_->EncryptSome(target_.buffer, pong, sizeof pong, true);
+        int ret = crypto_ctx_->EncryptSome(target_.buffer, pong, sizeof pong, true);
         if (ret) {
             SPDLOG_ERROR("session encrypt pong error {}", endpoint_);
             co_return;
@@ -463,16 +479,17 @@ private:
     Peer target_;
     asio::ip::tcp::resolver resolver_;
     asio::ip::tcp::endpoint endpoint_;
-    std::shared_ptr<CryptoContext> enc_ctx_;
-    std::shared_ptr<CryptoContext> dec_ctx_;
+    std::shared_ptr<CryptoContext> crypto_ctx_;
     std::shared_ptr<Obfuscator> obfs_;
     std::string current_uid_;
     int ongoing_stream_;
+    bool snell_v2_ = true;
 };
 
 std::shared_ptr<SnellServerSession> \
 SnellServerSession::New(asio::ip::tcp::socket socket, std::string_view psk, std::shared_ptr<Obfuscator> obfs) {
     static auto cipher = NewAes128Gcm();
-    return std::make_shared<SnellServerSessionImpl>(std::move(socket), cipher, psk, obfs);
+    static auto fallback = NewChacha20Poly1305Ietf();
+    return std::make_shared<SnellServerSessionImpl>(std::move(socket), cipher, fallback, psk, obfs);
 }
 

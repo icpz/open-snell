@@ -15,7 +15,6 @@
  * along with open-snell.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-
 #include <sodium.h>
 #include <arpa/inet.h>
 #include <assert.h>
@@ -27,17 +26,72 @@
 const size_t CHUNK_MAX_SIZE = 0x3FFFU;
 const size_t TAG_SIZE = 16U;
 
-CryptoContext::CryptoContext(std::shared_ptr<Cipher> cipher, std::string_view psk)
-    : cipher_{cipher}, psk_{psk},
-      key_(cipher->KeySize()), nonce_(cipher->NonceSize()) {
-    state_ = 0;
+class CryptoContextImpl : public CryptoContext {
+    struct Context {
+        Context(size_t key_size, size_t nonce_size)
+            : state{0}, key(key_size), nonce(nonce_size) {
+        }
+
+        void Queue(const uint8_t *data, size_t len) {
+            buffer.insert(buffer.end(), data, data + len);
+        }
+
+        void Dequeue(size_t len) {
+            buffer.erase(buffer.begin(), buffer.begin() + len);
+        }
+
+        void Increase() {
+            sodium_increment(nonce.data(), nonce.size());
+        }
+
+        void DeriveKey(const uint8_t *salt, std::string_view psk) {
+            int ret = \
+                crypto_pwhash(
+                    key.data(), key.size(), psk.data(), psk.size(),
+                    salt, 3ULL, 0x2000ULL, crypto_pwhash_ALG_ARGON2ID13
+                );
+            assert(ret == 0);
+        }
+
+        uint32_t state;
+        std::vector<uint8_t> key;
+        std::vector<uint8_t> nonce;
+        std::vector<uint8_t> buffer;
+    };
+public:
+    using CipherPtr = CryptoContext::CipherPtr;
+
+    enum { OK, ERROR = -1 };
+    enum { UNINITIALIZED, ENCRYPT, DECRYPT };
+
+    CryptoContextImpl(CipherPtr cipher, std::string_view psk, CipherPtr fallback);
+    ~CryptoContextImpl();
+
+    int EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext, size_t plen, bool add_zero_chunk);
+    int DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext, size_t clen, bool &has_zero_chunk);
+
+private:
+
+    CipherPtr cipher_;
+    CipherPtr fallback_;
+    std::string_view psk_;
+    bool cipher_selected_;
+    Context encrypt_ctx_;
+    Context decrypt_ctx_;
+};
+
+CryptoContextImpl::CryptoContextImpl(CipherPtr cipher, std::string_view psk, CipherPtr fallback)
+    : cipher_{cipher}, fallback_{fallback}, psk_{psk}, cipher_selected_{false},
+      encrypt_ctx_{cipher_->KeySize(), cipher_->NonceSize()},
+      decrypt_ctx_{cipher_->KeySize(), cipher_->NonceSize()} {
 }
 
-CryptoContext::~CryptoContext() {
+CryptoContextImpl::~CryptoContextImpl() {
 }
 
-int CryptoContext::EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext, size_t plen, bool add_zero_chunk) {
-    if (state_ == DECRYPT) {
+int CryptoContextImpl::EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext, size_t plen, bool add_zero_chunk) {
+    auto &ctx = encrypt_ctx_;
+    if (ctx.state == DECRYPT) {
         SPDLOG_CRITICAL("encrypt context invalid state");
         return ERROR;
     }
@@ -47,15 +101,19 @@ int CryptoContext::EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext
         return OK;
     }
 
-    if (state_ == UNINITIALIZED) {
+    if (ctx.state == UNINITIALIZED) {
         uint8_t salt[256];
         size_t salt_size = cipher_->SaltSize();
         SPDLOG_TRACE("encrypt context initializing");
         randombytes_buf(salt, salt_size);
-        DeriveKey(salt);
+        ctx.DeriveKey(salt, psk_);
         ctext.insert(ctext.end(), salt, salt + salt_size);
-        state_ = ENCRYPT;
+        ctx.state = ENCRYPT;
         SPDLOG_TRACE("encrypt context initializing done");
+        if (!cipher_selected_) {
+            cipher_selected_ = true;
+            SPDLOG_DEBUG("encrypt context default cipher selected");
+        }
     }
 
     size_t remained_size = plen;
@@ -73,25 +131,25 @@ int CryptoContext::EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext
         ret = \
             cipher_->Encrypt(
                 buffer, &clen, chunk_size_buf, sizeof chunk_size_buf,
-                nonce_.data(), key_.data()
+                ctx.nonce.data(), ctx.key.data()
             );
         if (ret) {
             SPDLOG_CRITICAL("cipher encrypt chunk size failed with {}", ret);
             break;
         }
-        sodium_increment(nonce_.data(), nonce_.size());
+        ctx.Increase();
         ctext.insert(ctext.end(), buffer, buffer + clen);
 
         ret = \
             cipher_->Encrypt(
                 buffer, &clen, phead, curr_chunk_size,
-                nonce_.data(), key_.data()
+                ctx.nonce.data(), ctx.key.data()
             );
         if (ret) {
             SPDLOG_CRITICAL("cipher encrypt chunk body failed with {}", ret);
             break;
         }
-        sodium_increment(nonce_.data(), nonce_.size());
+        ctx.Increase();
         ctext.insert(ctext.end(), buffer, buffer + clen);
         remained_size -= curr_chunk_size;
         phead += curr_chunk_size;
@@ -108,21 +166,23 @@ int CryptoContext::EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext
         ret = \
             cipher_->Encrypt(
                 buffer, &clen, chunk_size_buf, sizeof chunk_size_buf,
-                nonce_.data(), key_.data()
+                ctx.nonce.data(), ctx.key.data()
             );
         if (ret) {
             SPDLOG_CRITICAL("cipher encrypt chunk size failed with {}", ret);
             return ret;
         }
-        sodium_increment(nonce_.data(), nonce_.size());
+        ctx.Increase();
         ctext.insert(ctext.end(), buffer, buffer + clen);
+        SPDLOG_DEBUG("encrypt context zero chunk added");
     }
 
     return ret;
 }
 
-int CryptoContext::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext, size_t clen, bool &has_zero_chunk) {
-    if (state_ == ENCRYPT) {
+int CryptoContextImpl::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext, size_t clen, bool &has_zero_chunk) {
+    auto &ctx = decrypt_ctx_;
+    if (ctx.state == ENCRYPT) {
         SPDLOG_CRITICAL("decrypt context invalid state");
         return ERROR;
     }
@@ -133,24 +193,24 @@ int CryptoContext::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext
         return OK;
     }
 
-    buffer_.insert(buffer_.end(), ctext, ctext + clen);
+    ctx.Queue(ctext, clen);
 
-    if (state_ == UNINITIALIZED) {
+    if (ctx.state == UNINITIALIZED) {
         size_t salt_size = cipher_->SaltSize();
         SPDLOG_TRACE("decrypt context initializing");
-        if (buffer_.size() < salt_size) {
+        if (ctx.buffer.size() < salt_size) {
             SPDLOG_TRACE("decrypt context initializing need more data");
             return OK;
         }
-        const uint8_t *salt = buffer_.data();
-        DeriveKey(salt);
-        buffer_.erase(buffer_.begin(), buffer_.begin() + salt_size);
-        state_ = DECRYPT;
+        const uint8_t *salt = ctx.buffer.data();
+        ctx.DeriveKey(salt, psk_);
+        ctx.Dequeue(salt_size);
+        ctx.state = DECRYPT;
         SPDLOG_TRACE("decrypt context initializing done");
     }
 
-    size_t remained_size = buffer_.size();
-    auto *chead = buffer_.data();
+    size_t remained_size = ctx.buffer.size();
+    auto *chead = ctx.buffer.data();
     uint8_t buffer[65536];
     int ret = 0;
     while (remained_size) {
@@ -166,11 +226,21 @@ int CryptoContext::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext
             cipher_->Decrypt(
                 reinterpret_cast<uint8_t *>(&curr_chunk_size), &mlen,
                 chead, sizeof curr_chunk_size + TAG_SIZE,
-                nonce_.data(), key_.data()
+                ctx.nonce.data(), ctx.key.data()
             );
         if (ret) {
+            if (!cipher_selected_ && fallback_) {
+                SPDLOG_DEBUG("decrypt context retry with fallback cipher");
+                cipher_ = fallback_;
+                fallback_ = nullptr;
+                continue;
+            }
             SPDLOG_WARN("cipher decrypt chunk size failed with {}", ret);
             break;
+        }
+        if (!cipher_selected_) {
+            SPDLOG_DEBUG("decrypt context cipher selected");
+            cipher_selected_ = true;
         }
         curr_chunk_size = ntohs(curr_chunk_size);
         if (curr_chunk_size) {
@@ -181,7 +251,7 @@ int CryptoContext::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext
             break;
         }
         chead += sizeof curr_chunk_size + TAG_SIZE;
-        sodium_increment(nonce_.data(), nonce_.size());
+        ctx.Increase();
 
         if (curr_chunk_size == 0) {
             SPDLOG_DEBUG("decrypt context zero chunk detected");
@@ -193,27 +263,23 @@ int CryptoContext::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext
         ret = \
             cipher_->Decrypt(
                 buffer, &mlen, chead, curr_chunk_size + TAG_SIZE,
-                nonce_.data(), key_.data()
+                ctx.nonce.data(), ctx.key.data()
             );
         if (ret) {
             SPDLOG_WARN("cipher decrypt chunk body failed with {}", ret);
             break;
         }
         chead += curr_chunk_size + TAG_SIZE;
-        sodium_increment(nonce_.data(), nonce_.size());
+        ctx.Increase();
         ptext.insert(ptext.end(), buffer, buffer + mlen);
         remained_size -= excepted_size;
     }
-    buffer_.erase(buffer_.begin(), buffer_.end() - remained_size);
+    ctx.Dequeue(ctx.buffer.size() - remained_size);
     return ret;
 }
 
-void CryptoContext::DeriveKey(const uint8_t *salt) {
-    int ret = \
-        crypto_pwhash(
-            key_.data(), key_.size(), psk_.data(), psk_.size(),
-            salt, 3ULL, 0x2000ULL, crypto_pwhash_ALG_ARGON2ID13
-        );
-    assert(ret == 0);
-}
+std::shared_ptr<CryptoContext>
+    CryptoContext::New(CipherPtr cipher, std::string_view psk, CipherPtr fallback) {
+        return std::make_shared<CryptoContextImpl>(cipher, psk, fallback);
+    }
 
