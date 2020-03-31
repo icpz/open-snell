@@ -27,9 +27,16 @@ const size_t CHUNK_MAX_SIZE = 0x3FFFU;
 const size_t TAG_SIZE = 16U;
 
 class CryptoContextImpl : public CryptoContext {
+public:
+    using CipherPtr = CryptoContext::CipherPtr;
+
+    enum { OK, ERROR = -1 };
+    enum { UNINITIALIZED, ENCRYPT, DECRYPT };
+
+private:
     struct Context {
         Context(size_t key_size, size_t nonce_size)
-            : state{0}, key(key_size), nonce(nonce_size) {
+            : state{UNINITIALIZED}, key(key_size), nonce(nonce_size) {
         }
 
         void Queue(const uint8_t *data, size_t len) {
@@ -58,12 +65,8 @@ class CryptoContextImpl : public CryptoContext {
         std::vector<uint8_t> nonce;
         std::vector<uint8_t> buffer;
     };
+
 public:
-    using CipherPtr = CryptoContext::CipherPtr;
-
-    enum { OK, ERROR = -1 };
-    enum { UNINITIALIZED, ENCRYPT, DECRYPT };
-
     CryptoContextImpl(CipherPtr cipher, std::string_view psk, CipherPtr fallback);
     ~CryptoContextImpl();
 
