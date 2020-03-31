@@ -4,10 +4,10 @@ An opensource port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
-Currently the `snell-server` only functions as the origin snell v2.0b12,
-without encryption method auto-negotiation and v1 compatibility.
+Currently the `snell-server` only functions as the original snell v2.0b12,
+WITH encryption method auto-negotiation and v1 compatibility.
 
-The encryption method is `aes-128-gcm` fixed, so please update the client
+~~The encryption method is `aes-128-gcm` fixed, so~~ please update the client
 to the latest version.
 
 # Build
@@ -41,7 +41,7 @@ make
 
 ```
 
-The binary is produced at `build/snell-server/snell-server`
+The binary is produced at `build/snell_server/snell-server`
 
 # License
 
