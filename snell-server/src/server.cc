@@ -94,7 +94,11 @@ static asio::awaitable<void>
         while (true) {
             auto socket = co_await acceptor.async_accept(asio::use_awaitable);
             SPDLOG_DEBUG("accepted a new connection");
-            SnellServerSession::New(std::move(socket), psk, tmpl->Duplicate())->Start();
+            decltype(tmpl) obfs = nullptr;
+            if (tmpl) {
+                obfs = tmpl->Duplicate();
+            }
+            SnellServerSession::New(std::move(socket), psk, obfs)->Start();
         }
     }
 
