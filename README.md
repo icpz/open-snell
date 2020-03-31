@@ -1,6 +1,6 @@
 # open-snell
 
-An opensource port of [snell](https://github.com/surge-networks/snell)
+An open source port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
