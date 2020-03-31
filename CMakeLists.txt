@@ -13,5 +13,5 @@ pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET GLOBAL libsodium)
 
 add_subdirectory(third_party)
 
-add_subdirectory(snell-server)
+add_subdirectory(snell_server)
 
