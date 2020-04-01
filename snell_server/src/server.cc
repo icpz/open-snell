@@ -23,6 +23,7 @@
 #include <asio/awaitable.hpp>
 
 #include "session.hh"
+#include "ini.hh"
 #include "obfs/http.hh"
 #include "obfs/tls.hh"
 
@@ -33,6 +34,7 @@ asio::ip::tcp::endpoint ParseIpPort(std::string_view s, asio::error_code &ec);
 int main(int argc, char *argv[]) {
     cxxopts::Options opts{argv[0], "Unofficial Snell Server"};
     opts.add_options()
+        ("c,config",  "Configuration File", cxxopts::value<std::string>(), "Config")
         ("l,listen",  "Listening Address", cxxopts::value<std::string>(), "Ip:Port")
         ("k,key",     "Pre-shared Key", cxxopts::value<std::string>(), "Key")
         ("v,verbose", "Logging Level")
@@ -52,23 +54,54 @@ int main(int argc, char *argv[]) {
     spdlog::set_pattern("%^%L %D %T.%f %t %@] %v%$");
     SetupLogLevel(args.count("verbose"));
 
-    auto listen = args["listen"].as<std::string>();
-    auto psk    = args["key"].as<std::string>();
-
     std::shared_ptr<Obfuscator> obfs_tmpl = nullptr;
+    std::string listen;
+    std::string psk;
 
-    if (args.count("obfs")) {
-        auto obfs = args["obfs"].as<std::string>();
-        auto obfs_host = args["obfs-host"].as<std::string>();
-        if (obfs == "http") {
-            SPDLOG_INFO("using obfs method {}, obfs-host {}", obfs, obfs_host);
-            obfs_tmpl = NewHttpObfs(obfs_host);
-        } else if (obfs == "tls") {
-            SPDLOG_INFO("using obfs method {}, obfs-host {}", obfs, obfs_host);
-            obfs_tmpl = NewTlsObfs(obfs_host);
-        } else {
-            SPDLOG_WARN("unknown obfs method {}, disable obfs", obfs);
+    if (args.count("config")) {
+        SPDLOG_INFO("configuration file specified, ignore other cli options");
+
+        auto cf = INI::FromFile(args["config"].as<std::string>());
+        if (!cf) {
+            SPDLOG_CRITICAL("failed to parse configuration file {}", args["config"].as<std::string>());
+            return -1;
         }
+
+        listen = cf->Get("snell-server", "listen", "");
+        psk    = cf->Get("snell-server", "psk", "");
+        if (cf->Exists("snell-server", "obfs")) {
+            auto obfs = cf->Get("snell-server", "obfs", "");
+            auto obfs_host = cf->Get("snell-server", "obfs-host", "www.bing.com");
+            if (obfs == "http") {
+                SPDLOG_INFO("using obfs method {}, obfs-host {}", obfs, obfs_host);
+                obfs_tmpl = NewHttpObfs(obfs_host);
+            } else if (obfs == "tls") {
+                SPDLOG_INFO("using obfs method {}, obfs-host {}", obfs, obfs_host);
+                obfs_tmpl = NewTlsObfs(obfs_host);
+            } else {
+                SPDLOG_WARN("unknown obfs method {}, disable obfs", obfs);
+            }
+        }
+    } else {
+        listen = args["listen"].as<std::string>();
+        psk = args["key"].as<std::string>();
+        if (args.count("obfs")) {
+            auto obfs = args["obfs"].as<std::string>();
+            auto obfs_host = args["obfs-host"].as<std::string>();
+            if (obfs == "http") {
+                SPDLOG_INFO("using obfs method {}, obfs-host {}", obfs, obfs_host);
+                obfs_tmpl = NewHttpObfs(obfs_host);
+            } else if (obfs == "tls") {
+                SPDLOG_INFO("using obfs method {}, obfs-host {}", obfs, obfs_host);
+                obfs_tmpl = NewTlsObfs(obfs_host);
+            } else {
+                SPDLOG_WARN("unknown obfs method {}, disable obfs", obfs);
+            }
+        }
+    }
+    if (listen.empty() || psk.empty()) {
+        SPDLOG_CRITICAL("listening address and psk should not be empty");
+        return -1;
     }
 
     asio::error_code ec;

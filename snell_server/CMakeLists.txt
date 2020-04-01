@@ -16,6 +16,7 @@ list(APPEND SRCS
     src/crypto/crypto_context.cc
     src/obfs/http.cc
     src/obfs/tls.cc
+    src/ini.cc
     )
 
 list(APPEND DEPS
