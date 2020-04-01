@@ -27,15 +27,13 @@
 #include "obfs/tls.hh"
 
 void SetupLogLevel(int verbose);
-void StartServer(asio::ip::address bind_address, int port, std::string_view psk, std::shared_ptr<Obfuscator> obfs);
+void StartServer(asio::ip::tcp::endpoint ep, std::string_view psk, std::shared_ptr<Obfuscator> tmpl);
+asio::ip::tcp::endpoint ParseIpPort(std::string_view s, asio::error_code &ec);
 
 int main(int argc, char *argv[]) {
     cxxopts::Options opts{argv[0], "Unofficial Snell Server"};
     opts.add_options()
-        ("b,bind", "Bind Address",
-                    cxxopts::value<std::string>()->default_value("0.0.0.0"),
-                    "Address")
-        ("p,port",    "Listening Port", cxxopts::value<int>(), "Port")
+        ("l,listen",  "Listening Address", cxxopts::value<std::string>(), "Ip:Port")
         ("k,key",     "Pre-shared Key", cxxopts::value<std::string>(), "Key")
         ("v,verbose", "Logging Level")
         ("obfs",      "Obfuscator Method", cxxopts::value<std::string>(), "ObfsMethod")
@@ -54,9 +52,8 @@ int main(int argc, char *argv[]) {
     spdlog::set_pattern("%^%L %D %T.%f %t %@] %v%$");
     SetupLogLevel(args.count("verbose"));
 
-    auto bind_address = asio::ip::make_address(args["bind"].as<std::string>());
-    auto port         = args["port"].as<int>();
-    auto psk          = args["key"].as<std::string>();
+    auto listen = args["listen"].as<std::string>();
+    auto psk    = args["key"].as<std::string>();
 
     std::shared_ptr<Obfuscator> obfs_tmpl = nullptr;
 
@@ -74,7 +71,13 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    StartServer(bind_address, port, psk, obfs_tmpl);
+    asio::error_code ec;
+    auto ep = ParseIpPort(listen, ec);
+    if (ec) {
+        SPDLOG_CRITICAL("failed to parse ip:port {}, {}", listen, ec.message());
+        return -1;
+    }
+    StartServer(std::move(ep), psk, obfs_tmpl);
 
     return 0;
 }
@@ -102,14 +105,16 @@ static asio::awaitable<void>
         }
     }
 
-void StartServer(asio::ip::address bind_address, int port, std::string_view psk, std::shared_ptr<Obfuscator> tmpl) {
+void StartServer(asio::ip::tcp::endpoint ep, std::string_view psk, std::shared_ptr<Obfuscator> tmpl) {
     asio::io_context ctx{1};
-    asio::ip::tcp::acceptor acceptor{ctx, {bind_address, static_cast<uint16_t>(port)}};
+    auto bind_address = ep.address().to_string();
+    auto port = ep.port();
+    asio::ip::tcp::acceptor acceptor{ctx, std::move(ep)};
 
     asio::signal_set signals(ctx, SIGTERM, SIGINT);
 
     signals.async_wait([&ctx](auto, auto) { ctx.stop(); });
-    SPDLOG_INFO("start listening at [{}]:{}", bind_address.to_string(), port);
+    SPDLOG_INFO("start listening at [{}]:{}", bind_address, port);
     asio::co_spawn(
         ctx,
         [acceptor = std::move(acceptor), psk, tmpl]() mutable {
@@ -119,4 +124,25 @@ void StartServer(asio::ip::address bind_address, int port, std::string_view psk,
     );
 
     ctx.run();
+}
+
+asio::ip::tcp::endpoint ParseIpPort(std::string_view s, asio::error_code &ec) {
+    ec.clear();
+    auto pos = s.find_last_of(":");
+    if (pos == std::string_view::npos) {
+        ec = asio::error::invalid_argument;
+        SPDLOG_ERROR("invalid listen address {}", s);
+        return asio::ip::tcp::endpoint{};
+    }
+    auto port_string = s.substr(pos + 1);
+    auto ip_string   = s.substr(0, pos);
+    if (ip_string[0] == '[') {
+        ip_string = ip_string.substr(1, ip_string.size() - 2);
+    }
+    auto ip   = asio::ip::make_address(ip_string, ec);
+    auto port = static_cast<uint16_t>(std::stoul(std::string{port_string}));
+    if (!ec) {
+        return asio::ip::tcp::endpoint{ip, port};
+    }
+    return asio::ip::tcp::endpoint{};
 }
