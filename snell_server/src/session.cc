@@ -77,11 +77,11 @@ public:
     {
         endpoint_ = client_.socket.remote_endpoint();
         crypto_ctx_ = CryptoContext::New(cipher, psk, fallback);
-        SPDLOG_DEBUG("session opened {}", endpoint_);
+        SPDLOG_DEBUG("session from {} opened", endpoint_);
     }
 
     ~SnellServerSessionImpl() {
-        SPDLOG_DEBUG("session closed {}", endpoint_);
+        SPDLOG_DEBUG("session {} from {} closed", uid_, endpoint_);
     }
 
     void Start() {
@@ -89,6 +89,7 @@ public:
 
         target_.Reset(true);
         client_.Reset();
+        uid_ = "<none>";
         asio::co_spawn(
             executor_,
             [self]() { return self->DoHandleSubSessions(); },
@@ -118,10 +119,10 @@ private:
                 );
             if (ec) {
                 if (ec == asio::error::eof) {
-                    SPDLOG_DEBUG("session tcp stream meets eof {}", endpoint_);
+                    SPDLOG_DEBUG("session {} from {} tcp stream meets eof", uid_, endpoint_);
                     eof = true;
                 } else {
-                    SPDLOG_ERROR("session tcp read error {}, {}", endpoint_, ec.message());
+                    SPDLOG_ERROR("session {} from {} tcp read error, {}", uid_, endpoint_, ec.message());
                 }
                 co_return ERROR;
             }
@@ -129,56 +130,58 @@ private:
             if (obfs_) {
                 ret = obfs_->DeObfsRequest(buf, nbytes);
                 if (ret < 0) {
-                    SPDLOG_ERROR("session handshake deobfs failed {}", endpoint_);
+                    SPDLOG_ERROR("session {} from {} handshake deobfs failed", uid_, endpoint_);
                     co_return ERROR;
                 } else if (ret == 0) {
-                    SPDLOG_TRACE("session handshake deobfs need more {}", endpoint_);
+                    SPDLOG_TRACE("session {} from {} handshake deobfs need more", uid_, endpoint_);
                     continue;
                 }
                 nbytes = ret;
             }
             ret = crypto_ctx_->DecryptSome(plain, buf, nbytes, has_zero_chunk);
             if (ret) {
-                SPDLOG_ERROR("session handshake decrypt failed {}", endpoint_);
+                SPDLOG_ERROR("session {} from {} handshake decrypt failed", uid_, endpoint_);
                 co_return ERROR;
             }
 
             uint8_t *phead = plain.data();
             size_t remained_size = plain.size();
             if (remained_size < 4) {
-                SPDLOG_TRACE("session handshake need more {}", endpoint_);
+                SPDLOG_TRACE("session {} from {} handshake need more", uid_, endpoint_);
                 continue;
             }
 
             if (phead[0] != 0x01) {
-                SPDLOG_ERROR("session unsupported protocol version {}, {:x}", endpoint_, phead[0]);
+                SPDLOG_ERROR("session {} from {} unsupported protocol version 0x{:x}", uid_, endpoint_, phead[0]);
                 co_return ERROR;
             }
 
             if (phead[1] == 0x00) { // ping
-                SPDLOG_DEBUG("session ping command {}", endpoint_);
+                SPDLOG_DEBUG("session {} from {} ping command", uid_, endpoint_);
                 cmd = 0x00;
                 co_return OK;
             } else if (phead[1] == 0x05 || phead[1] == 0x01) { // connect
                 cmd = phead[1];
-                SPDLOG_DEBUG("session connect command {}", endpoint_);
+                SPDLOG_DEBUG("session {} from {} connect command", uid_, endpoint_);
                 if (cmd == 0x01) {
-                    SPDLOG_INFO("session snell v1 {}", endpoint_);
+                    SPDLOG_INFO("session {} from {} snell v1", uid_, endpoint_);
                     snell_v2_ = false;
                 }
             } else {
-                SPDLOG_ERROR("session unsupported command {}, {:x}", endpoint_, phead[1]);
+                SPDLOG_ERROR("session {} from {} unsupported command, 0x{:x}", uid_, endpoint_, phead[1]);
                 co_return ERROR;
             }
             int uid_len = phead[2];
             remained_size -= 3;
             phead += 3;
             if (remained_size < uid_len + 1) {
-                SPDLOG_TRACE("session handshake need more {}", endpoint_);
+                SPDLOG_TRACE("session {} from {} handshake need more", uid_, endpoint_);
                 continue;
             }
+            SPDLOG_DEBUG("session {} from {} extract id len {}", uid_, endpoint_, uid_len);
             if (uid_len) {
-                current_uid_.assign((char *)phead, uid_len);
+                uid_.assign((char *)phead, uid_len);
+                SPDLOG_DEBUG("session {} from {} extract id", uid_, endpoint_);
             }
             remained_size -= uid_len;
             phead += uid_len;
@@ -187,7 +190,7 @@ private:
             remained_size -= 1;
             phead += 1;
             if (remained_size < alen + 2) {
-                SPDLOG_TRACE("session handshake need more {}", endpoint_);
+                SPDLOG_TRACE("session {} from {} handshake need more", uid_, endpoint_);
                 continue;
             }
             host.assign((char *)phead, alen);
@@ -195,7 +198,7 @@ private:
             phead += alen;
             memcpy(&port, phead, 2);
             port = ntohs(port);
-            SPDLOG_DEBUG("session handshake extracted target {}, [{}]:{}", endpoint_, host, port);
+            SPDLOG_DEBUG("session {} from {} handshake extracted target [{}]:{}", uid_, endpoint_, host, port);
             remained_size -= 2;
             phead += 2;
             std::copy_n(phead, remained_size, std::back_inserter(client_.buffer));
@@ -218,13 +221,13 @@ private:
             bool eof = false;
             if ((co_await DoHandshake(cmd, host, port, eof)) == ERROR) {
                 if (!eof) {
-                    SPDLOG_ERROR("session handshake failed, abort session {}", endpoint_);
+                    SPDLOG_ERROR("session {} from {} handshake failed, abort session", uid_, endpoint_);
                 } else {
-                    SPDLOG_INFO("session handshake meets eof, end session {}", endpoint_);
+                    SPDLOG_INFO("session {} from {} handshake meets eof, end session", uid_, endpoint_);
                 }
                 co_return;
             }
-            SPDLOG_TRACE("session cmd {}, {:x}", endpoint_, cmd);
+            SPDLOG_TRACE("session {} from {} cmd {:x}", uid_, endpoint_, cmd);
             if (cmd == 0x05 || cmd == 0x01) {
                 auto resolve_results = co_await \
                     resolver_.async_resolve(
@@ -233,7 +236,7 @@ private:
                     );
 
                 if (ec) {
-                    SPDLOG_ERROR("session failed to resolve {}, [{}]:{}, {}", endpoint_, host, port, ec.message());
+                    SPDLOG_ERROR("session {} from {} failed to resolve [{}]:{}, {}", uid_, endpoint_, host, port, ec.message());
                     co_await DoWriteErrorBack(ec);
                     if (snell_v2_) {
                         continue;
@@ -249,7 +252,7 @@ private:
                     );
 
                 if (ec) {
-                    SPDLOG_ERROR("session failed to connect {}, [{}]:{}, {}", endpoint_, host, port, ec.message());
+                    SPDLOG_ERROR("session {} from {} failed to connect [{}]:{}, {}", uid_, endpoint_, host, port, ec.message());
                     co_await DoWriteErrorBack(ec);
                     if (snell_v2_) {
                         continue;
@@ -257,7 +260,7 @@ private:
                         break;
                     }
                 }
-                SPDLOG_INFO("session connected to target {}->{}", endpoint_, remote_endpoint);
+                SPDLOG_INFO("session {} from {} connected to target {}", uid_, endpoint_, remote_endpoint);
 
                 ongoing_stream_ = 2;
                 asio::co_spawn(
@@ -273,11 +276,11 @@ private:
 
                 break;
             } else if (cmd == 0x00) {
-                SPDLOG_DEBUG("session sending pong back {}", endpoint_);
+                SPDLOG_DEBUG("session {} from {} sending pong back", uid_, endpoint_);
                 co_await DoSendPongBack();
                 break;
             } else {
-                SPDLOG_ERROR("session unknown command {}, {:x}", endpoint_, cmd);
+                SPDLOG_ERROR("session {} from {} unknown command 0x{:x}", uid_, endpoint_, cmd);
                 break;
             }
         } while (false);
@@ -295,7 +298,7 @@ private:
             int ret;
 
             if (client_.buffer.empty() && !client_.shutdown_after_forward) {
-                SPDLOG_TRACE("session client reading {}", endpoint_);
+                SPDLOG_TRACE("session {} from {} client reading", uid_, endpoint_);
                 nbytes = co_await \
                     client_.socket.async_read_some(
                         asio::buffer(buf, BUF_SIZE),
@@ -303,9 +306,9 @@ private:
                     );
                 if (ec) {
                     if (snell_v2_ || ec != asio::error::eof) {
-                        SPDLOG_ERROR("session client read error {}, {}", endpoint_, ec.message());
+                        SPDLOG_ERROR("session {} from {} client read error, {}", uid_, endpoint_, ec.message());
                     } else {
-                        SPDLOG_INFO("session client read meets eof {}", endpoint_);
+                        SPDLOG_INFO("session {} from {} client read meets eof", uid_, endpoint_);
                     }
                     break;
                 }
@@ -314,17 +317,17 @@ private:
             if (obfs_) {
                 ret = obfs_->DeObfsRequest(buf, nbytes);
                 if (ret < 0) {
-                    SPDLOG_ERROR("session forward c2s deobfs failed {}", endpoint_);
+                    SPDLOG_ERROR("session {} from {} forward c2s deobfs failed", uid_, endpoint_);
                     break;
                 } else if (ret == 0) {
-                    SPDLOG_TRACE("session forward c2s deobfs need more {}", endpoint_);
+                    SPDLOG_TRACE("session {} from {} forward c2s deobfs need more", uid_, endpoint_);
                     continue;
                 }
                 nbytes = ret;
             }
             ret = crypto_ctx_->DecryptSome(client_.buffer, buf, nbytes, has_zero_chunk);
             if (ret) {
-                SPDLOG_ERROR("session decrypt client error {}", endpoint_);
+                SPDLOG_ERROR("session {} from {} decrypt client error", uid_, endpoint_);
                 break;
             }
 
@@ -335,23 +338,23 @@ private:
                     asio::redirect_error(asio::use_awaitable, ec)
                 );
                 if (ec) {
-                    SPDLOG_ERROR("session target write error {}, {}", endpoint_, ec.message());
+                    SPDLOG_ERROR("session {} from {} target write error, {}", uid_, endpoint_, ec.message());
                     break;
                 }
                 client_.buffer.clear();
             }
             if (has_zero_chunk || client_.shutdown_after_forward) {
-                SPDLOG_DEBUG("session terminates forwarding c2s {}", endpoint_);
+                SPDLOG_DEBUG("session {} from {} terminates forwarding c2s", uid_, endpoint_);
                 break;
             }
         }
         target_.socket.shutdown(asio::ip::tcp::socket::shutdown_send, ec);
         if (ec) {
-            SPDLOG_WARN("session target shutdown send failed {}, {}", endpoint_, ec.message());
+            SPDLOG_WARN("session {} from {} target shutdown send failed, {}", uid_, endpoint_, ec.message());
         }
         --ongoing_stream_;
         if (snell_v2_ && !ongoing_stream_) {
-            SPDLOG_INFO("session starts for new sub connection {}", endpoint_);
+            SPDLOG_INFO("session {} from {} starts for new sub connection", uid_, endpoint_);
             Start();
         }
     }
@@ -368,18 +371,18 @@ private:
             bool add_zero_chunk = false;
             int ret;
 
-            SPDLOG_TRACE("session target reading {}", endpoint_);
+            SPDLOG_TRACE("session {} from {} target reading", uid_, endpoint_);
             nbytes = co_await \
                 target_.socket.async_read_some(
                     asio::buffer(buf, BUF_SIZE) + bias,
                     asio::redirect_error(asio::use_awaitable, ec)
                 );
             if (ec && ec != asio::error::eof) {
-                SPDLOG_ERROR("session target read error {}, {}", endpoint_, ec.message());
+                SPDLOG_ERROR("session {} from {} target read error, {}", uid_, endpoint_, ec.message());
                 break;
             }
             if (ec == asio::error::eof) {
-                SPDLOG_INFO("session target read meets eof {}", endpoint_);
+                SPDLOG_INFO("session {} from {} target read meets eof", uid_, endpoint_);
                 add_zero_chunk = true;
             }
             nbytes += bias;
@@ -387,7 +390,7 @@ private:
 
             ret = crypto_ctx_->EncryptSome(target_.buffer, buf, nbytes, add_zero_chunk && snell_v2_);
             if (ret) {
-                SPDLOG_ERROR("session encrypt target error {}", endpoint_);
+                SPDLOG_ERROR("session {} from {} encrypt target error", uid_, endpoint_);
                 break;
             }
             if (obfs_) {
@@ -400,22 +403,22 @@ private:
                 asio::redirect_error(asio::use_awaitable, ec)
             );
             if (ec) {
-                SPDLOG_ERROR("session client write error {}, {}", endpoint_, ec.message());
+                SPDLOG_ERROR("session {} from {} client write error, {}", uid_, endpoint_, ec.message());
                 break;
             }
             target_.buffer.clear();
             if (add_zero_chunk) {
-                SPDLOG_DEBUG("session terminates forwarding s2c {}", endpoint_);
+                SPDLOG_DEBUG("session {} from {} terminates forwarding s2c", uid_, endpoint_);
                 break;
             }
         }
         target_.socket.shutdown(asio::ip::tcp::socket::shutdown_receive, ec);
         if (ec) {
-            SPDLOG_DEBUG("session target shutdown receive failed {}, {}", endpoint_, ec.message());
+            SPDLOG_DEBUG("session {} from {} target shutdown receive failed, {}", uid_, endpoint_, ec.message());
         }
         --ongoing_stream_;
         if (snell_v2_ && !ongoing_stream_) {
-            SPDLOG_INFO("session starts for new sub connection {}", endpoint_);
+            SPDLOG_INFO("session {} from {} starts for new sub connection", uid_, endpoint_);
             Start();
         }
     }
@@ -429,11 +432,11 @@ private:
         buf[1] = static_cast<uint8_t>(std::min(emsg.size(), 255UL));
         emsg.copy((char *)buf + 2, buf[1]);
         nbytes = 2 + static_cast<size_t>(buf[1]);
-        SPDLOG_DEBUG("session write error back {}, {}", endpoint_, emsg);
+        SPDLOG_DEBUG("session {} from {} write error back, {}", uid_, endpoint_, emsg);
 
         int ret = crypto_ctx_->EncryptSome(target_.buffer, buf, nbytes, true);
         if (ret) {
-            SPDLOG_ERROR("session encrypt error message error {}", endpoint_);
+            SPDLOG_ERROR("session {} from {} encrypt error message error", uid_, endpoint_);
             goto __clean_up;
         }
         if (obfs_) {
@@ -445,7 +448,7 @@ private:
             asio::redirect_error(asio::use_awaitable, ec)
         );
         if (ret) {
-            SPDLOG_ERROR("session write pong error {}, {}", endpoint_, ec.message());
+            SPDLOG_ERROR("session {} from {} write error error, {}", uid_, endpoint_, ec.message());
         }
 
     __clean_up:
@@ -458,7 +461,7 @@ private:
         asio::error_code ec;
         int ret = crypto_ctx_->EncryptSome(target_.buffer, pong, sizeof pong, true);
         if (ret) {
-            SPDLOG_ERROR("session encrypt pong error {}", endpoint_);
+            SPDLOG_ERROR("session {} from {} encrypt pong error", uid_, endpoint_);
             co_return;
         }
         if (obfs_) {
@@ -470,7 +473,7 @@ private:
             asio::redirect_error(asio::use_awaitable, ec)
         );
         if (ret) {
-            SPDLOG_ERROR("session write pong error {}, {}", endpoint_, ec.message());
+            SPDLOG_ERROR("session {} from {} write pong error, {}", uid_, endpoint_, ec.message());
         }
     }
 
@@ -481,7 +484,7 @@ private:
     asio::ip::tcp::endpoint endpoint_;
     std::shared_ptr<CryptoContext> crypto_ctx_;
     std::shared_ptr<Obfuscator> obfs_;
-    std::string current_uid_;
+    std::string uid_;
     int ongoing_stream_;
     bool snell_v2_ = true;
 };

@@ -355,6 +355,7 @@ int TlsObfs::ObfsRequest(std::vector<uint8_t> &buf) {
 
 int TlsObfs::DeObfsResponse(uint8_t *buf, int len) {
     int ret;
+    SPDLOG_TRACE("debofs tls response new data {} bytes", len);
     std::copy_n(buf, len, std::back_inserter(buf_));
     len = buf_.size();
     if (!deobfs_stage_) {
@@ -464,6 +465,7 @@ int TlsObfs::ObfsResponse(std::vector<uint8_t> &buf) {
 
 int TlsObfs::DeObfsRequest(uint8_t *buf, int len) {
     int ret;
+    SPDLOG_TRACE("debofs tls request new data {} bytes", len);
     std::copy_n(buf, len, std::back_inserter(buf_));
     len = buf_.size();
     if (!deobfs_stage_) {
