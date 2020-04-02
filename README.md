@@ -4,11 +4,9 @@ An open source port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
-Currently the `snell-server` only functions as the original snell v2.0b12,
-WITH encryption method auto-negotiation and v1 compatibility.
+Currently the `snell-server` functions as the latest snell v2.0, **WITH** encryption method auto-negotiation and v1 compatibility.
 
-~~The encryption method is `aes-128-gcm` fixed, so~~ please update the client
-to the latest version.
+~~The encryption method is `aes-128-gcm` fixed, so~~ please update the client to the latest version.
 
 # Build
 
@@ -18,13 +16,13 @@ Only supports unix-like operating system.
 
 + [cmake](https://cmake.org) 3.13+
 + clang 7.0+
-+ libc++ 7.0+
++ libc++ 7.0+ (for linux)
 + libsodium 1.0.17+
 + openssl 1.1+
 
 ## Build Steps
 
-Only tested on macOS and Debian 9 currently.
+Only tested on macOS and Debian 9+ currently.
 
 ```bash
 
