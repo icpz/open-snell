@@ -312,23 +312,23 @@ private:
                     }
                     break;
                 }
-            }
 
-            if (obfs_) {
-                ret = obfs_->DeObfsRequest(buf, nbytes);
-                if (ret < 0) {
-                    SPDLOG_ERROR("session {} from {} forward c2s deobfs failed", uid_, endpoint_);
-                    break;
-                } else if (ret == 0) {
-                    SPDLOG_TRACE("session {} from {} forward c2s deobfs need more", uid_, endpoint_);
-                    continue;
+                if (obfs_) {
+                    ret = obfs_->DeObfsRequest(buf, nbytes);
+                    if (ret < 0) {
+                        SPDLOG_ERROR("session {} from {} forward c2s deobfs failed", uid_, endpoint_);
+                        break;
+                    } else if (ret == 0) {
+                        SPDLOG_TRACE("session {} from {} forward c2s deobfs need more", uid_, endpoint_);
+                        continue;
+                    }
+                    nbytes = ret;
                 }
-                nbytes = ret;
-            }
-            ret = crypto_ctx_->DecryptSome(client_.buffer, buf, nbytes, has_zero_chunk);
-            if (ret) {
-                SPDLOG_ERROR("session {} from {} decrypt client error", uid_, endpoint_);
-                break;
+                ret = crypto_ctx_->DecryptSome(client_.buffer, buf, nbytes, has_zero_chunk);
+                if (ret) {
+                    SPDLOG_ERROR("session {} from {} decrypt client error", uid_, endpoint_);
+                    break;
+                }
             }
 
             if (!client_.buffer.empty()) {
