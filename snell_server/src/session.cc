@@ -23,6 +23,7 @@
 #include <spdlog/fmt/ostr.h>
 
 #include "session.hh"
+#include "async_utils/async_latch.hh"
 #include "crypto/crypto_context.hh"
 #include "crypto/aes_gcm_cipher.hh"
 #include "crypto/chacha20_poly1305_ietf_cipher.hh"
@@ -73,6 +74,7 @@ public:
           client_{std::move(socket)},
           target_{executor_},
           resolver_{executor_},
+          latch_{executor_},
           obfs_{obfs}
     {
         endpoint_ = client_.socket.remote_endpoint();
@@ -217,7 +219,7 @@ private:
         uint16_t port;
         asio::error_code ec;
 
-        do {
+        while (true) {
             bool eof = false;
             if ((co_await DoHandshake(cmd, host, port, eof)) == ERROR) {
                 if (!eof) {
@@ -262,7 +264,11 @@ private:
                 }
                 SPDLOG_INFO("session {} from {} connected to target {}", uid_, endpoint_, remote_endpoint);
 
-                ongoing_stream_ = 2;
+                ec = latch_.Reset(2);
+                if (ec) {
+                    SPDLOG_CRITICAL("session {} from {} reset latch failed, {}", uid_, endpoint_, ec.message());
+                    break;
+                }
                 asio::co_spawn(
                     executor_,
                     [self]() { return self->DoForwardC2T(); },
@@ -273,8 +279,17 @@ private:
                     [self]() { return self->DoForwardT2C(); },
                     asio::detached
                 );
-
-                break;
+                ec = co_await latch_.AsyncWait();
+                if (ec) {
+                    SPDLOG_CRITICAL("session {} from {} wait latch failed, {}", uid_, endpoint_, ec.message());
+                    break;
+                }
+                if (!snell_v2_) {
+                    break;
+                }
+                uid_ = "<none>";
+                SPDLOG_INFO("session {} from {} starts for new sub connection", uid_, endpoint_);
+                continue;
             } else if (cmd == 0x00) {
                 SPDLOG_DEBUG("session {} from {} sending pong back", uid_, endpoint_);
                 co_await DoSendPongBack();
@@ -283,7 +298,7 @@ private:
                 SPDLOG_ERROR("session {} from {} unknown command 0x{:x}", uid_, endpoint_, cmd);
                 break;
             }
-        } while (false);
+        }
         co_return;
     }
 
@@ -352,11 +367,11 @@ private:
         if (ec) {
             SPDLOG_WARN("session {} from {} target shutdown send failed, {}", uid_, endpoint_, ec.message());
         }
-        --ongoing_stream_;
-        if (snell_v2_ && !ongoing_stream_) {
-            SPDLOG_INFO("session {} from {} starts for new sub connection", uid_, endpoint_);
-            Start();
+        ec = co_await latch_.AsyncCountDown();
+        if (ec) {
+            SPDLOG_CRITICAL("session {} from {} latch count down failed, {}", uid_, endpoint_, ec.message());
         }
+        client_.Reset();
     }
 
     asio::awaitable<void> DoForwardT2C() {
@@ -416,11 +431,11 @@ private:
         if (ec) {
             SPDLOG_DEBUG("session {} from {} target shutdown receive failed, {}", uid_, endpoint_, ec.message());
         }
-        --ongoing_stream_;
-        if (snell_v2_ && !ongoing_stream_) {
-            SPDLOG_INFO("session {} from {} starts for new sub connection", uid_, endpoint_);
-            Start();
+        ec = co_await latch_.AsyncCountDown();
+        if (ec) {
+            SPDLOG_CRITICAL("session {} from {} latch count down failed, {}", uid_, endpoint_, ec.message());
         }
+        target_.Reset(true);
     }
 
     asio::awaitable<void> DoWriteErrorBack(asio::error_code ec) {
@@ -482,10 +497,10 @@ private:
     Peer target_;
     asio::ip::tcp::resolver resolver_;
     asio::ip::tcp::endpoint endpoint_;
+    AsyncLatch latch_;
     std::shared_ptr<CryptoContext> crypto_ctx_;
     std::shared_ptr<Obfuscator> obfs_;
     std::string uid_;
-    int ongoing_stream_;
     bool snell_v2_ = true;
 };
 
