@@ -101,7 +101,7 @@ public:
         SPDLOG_DEBUG("session {} from {} closed", uid_, endpoint_);
     }
 
-    void Start() {
+    void Start() override {
         auto self{shared_from_this()};
 
         target_.Reset(true);

@@ -29,7 +29,7 @@ public:
         EVP_CIPHER_CTX_free(ctx_);
     }
 
-    int Encrypt(uint8_t *c, size_t *clen, const uint8_t *ptext, size_t plen, const uint8_t *nonce, const uint8_t *key) const {
+    int Encrypt(uint8_t *c, size_t *clen, const uint8_t *ptext, size_t plen, const uint8_t *nonce, const uint8_t *key) const override {
         int ret;
         int encrypted_len = plen;
         uint8_t *ptag = c + plen;
@@ -46,7 +46,7 @@ public:
         return !ret;
     }
 
-    int Decrypt(uint8_t *p, size_t *plen, const uint8_t *ctext, size_t clen, const uint8_t *nonce, const uint8_t *key) const {
+    int Decrypt(uint8_t *p, size_t *plen, const uint8_t *ctext, size_t clen, const uint8_t *nonce, const uint8_t *key) const override {
         int ret;
         int plain_len = clen - TAG_SIZE;
         uint8_t *ptag = const_cast<uint8_t *>(ctext + plain_len);

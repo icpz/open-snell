@@ -29,7 +29,7 @@ public:
     INIImpl() = default;
     ~INIImpl() = default;
 
-    std::string Get(std::string_view section, std::string_view key, std::string_view def) const {
+    std::string Get(std::string_view section, std::string_view key, std::string_view def) const override {
         auto real_key = MakeKey(section, key);
         auto pos = items_.find(real_key);
         if (pos == items_.end()) {
@@ -38,7 +38,7 @@ public:
         return pos->second;
     }
 
-    bool Exists(std::string_view section, std::string_view key) const {
+    bool Exists(std::string_view section, std::string_view key) const override {
         auto real_key = MakeKey(section, key);
         auto pos = items_.find(real_key);
         return pos != items_.end();

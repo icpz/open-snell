@@ -272,13 +272,13 @@ public:
 
     ~TlsObfs() = default;
 
-    int ObfsRequest(std::vector<uint8_t> &buf);
-    int DeObfsResponse(uint8_t *buf, int len);
+    int ObfsRequest(std::vector<uint8_t> &buf) override;
+    int DeObfsResponse(uint8_t *buf, int len) override;
 
-    int ObfsResponse(std::vector<uint8_t> &buf);
-    int DeObfsRequest(uint8_t *buf, int len);
+    int ObfsResponse(std::vector<uint8_t> &buf) override;
+    int DeObfsRequest(uint8_t *buf, int len) override;
 
-    std::shared_ptr<Obfuscator> Duplicate() const {
+    std::shared_ptr<Obfuscator> Duplicate() const override {
         return std::make_shared<TlsObfs>(*this);
     }
 

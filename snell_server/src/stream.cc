@@ -38,8 +38,8 @@ public:
 
     ~AsyncSnellStreamImpl() = default;
 
-    asio::awaitable<size_t> AsyncReadSome(std::vector<uint8_t> &buf, bool &has_zero_chunk, asio::error_code &ec);
-    asio::awaitable<size_t> AsyncWrite(const uint8_t *buf, size_t len, bool add_zero_chunk, asio::error_code &ec);
+    asio::awaitable<size_t> AsyncReadSome(std::vector<uint8_t> &buf, bool &has_zero_chunk, asio::error_code &ec) override;
+    asio::awaitable<size_t> AsyncWrite(const uint8_t *buf, size_t len, bool add_zero_chunk, asio::error_code &ec) override;
 
 private:
     asio::ip::tcp::socket socket_;

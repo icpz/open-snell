@@ -70,9 +70,9 @@ public:
     CryptoContextImpl(CipherPtr cipher, std::string_view psk, CipherPtr fallback);
     ~CryptoContextImpl();
 
-    int EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext, size_t plen, bool add_zero_chunk);
-    int DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext, size_t clen, bool &has_zero_chunk);
-    bool HasPending() const {
+    int EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext, size_t plen, bool add_zero_chunk) override;
+    int DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext, size_t clen, bool &has_zero_chunk) override;
+    bool HasPending() const override {
         return decrypt_ctx_.buffer.size() > sizeof(uint16_t) + TAG_SIZE;
     }
 

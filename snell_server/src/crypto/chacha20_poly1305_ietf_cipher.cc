@@ -23,7 +23,7 @@ class Chacha20Poly1305IetfCipher : public Cipher {
 public:
     virtual ~Chacha20Poly1305IetfCipher() = default;
 
-    int Encrypt(uint8_t *c, size_t *clen, const uint8_t *ptext, size_t plen, const uint8_t *nonce, const uint8_t *key) const {
+    int Encrypt(uint8_t *c, size_t *clen, const uint8_t *ptext, size_t plen, const uint8_t *nonce, const uint8_t *key) const override {
         unsigned long long clenll;
         int ret = \
             crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -36,7 +36,7 @@ public:
         return ret;
     }
 
-    int Decrypt(uint8_t *p, size_t *plen, const uint8_t *ctext, size_t clen, const uint8_t *nonce, const uint8_t *key) const {
+    int Decrypt(uint8_t *p, size_t *plen, const uint8_t *ctext, size_t clen, const uint8_t *nonce, const uint8_t *key) const override {
         unsigned long long plenll;
         int ret = \
             crypto_aead_chacha20poly1305_ietf_decrypt(
