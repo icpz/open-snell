@@ -22,6 +22,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
+#include "stream.hh"
 #include "session.hh"
 #include "async_utils/async_latch.hh"
 #include "crypto/crypto_context.hh"
@@ -37,27 +38,37 @@ OStream &operator<<(OStream &os, const asio::ip::tcp::endpoint &ep) {
 class SnellServerSessionImpl :
     public SnellServerSession,
     public std::enable_shared_from_this<SnellServerSessionImpl> {
-    struct Peer {
-        Peer(asio::ip::tcp::socket socket)
-            : socket{std::move(socket)} {
+    struct Client {
+        Client() = default;
+
+        Client(std::shared_ptr<AsyncSnellStream> stream)
+            : stream{stream} {
         }
 
-        template<class Executor>
-        Peer(Executor &executor)
-            : socket{executor} {
+        void Reset() {
+            buffer.clear();
+            shutdown_after_forward = false;
+        }
+
+        std::shared_ptr<AsyncSnellStream> stream;
+        std::vector<uint8_t> buffer;
+        bool shutdown_after_forward = false;
+    };
+
+    struct Target {
+        using ExecutorType = typename asio::ip::tcp::socket::executor_type;
+
+        Target(ExecutorType ex)
+            : socket{ex} {
         }
 
         void Reset(bool close_socket = false) {
             if (close_socket && socket.is_open()) {
                 socket.close();
             }
-            buffer.clear();
-            shutdown_after_forward = false;
         }
 
         asio::ip::tcp::socket socket;
-        std::vector<uint8_t> buffer;
-        bool shutdown_after_forward = false;
     };
 
     enum { BUF_SIZE = 8192 };
@@ -71,14 +82,18 @@ public:
         std::shared_ptr<Obfuscator> obfs = nullptr
     )
         : executor_{socket.get_executor()},
-          client_{std::move(socket)},
+          client_{},
           target_{executor_},
           resolver_{executor_},
-          latch_{executor_},
-          obfs_{obfs}
+          latch_{executor_}
     {
-        endpoint_ = client_.socket.remote_endpoint();
-        crypto_ctx_ = CryptoContext::New(cipher, psk, fallback);
+        endpoint_ = socket.remote_endpoint();
+        client_.stream = \
+            AsyncSnellStream::NewServer(
+                std::move(socket),
+                CryptoContext::New(cipher, psk, fallback),
+                obfs
+            );
         SPDLOG_DEBUG("session from {} opened", endpoint_);
     }
 
@@ -107,45 +122,22 @@ private:
     };
 
     asio::awaitable<State> DoHandshake(int &cmd, std::string &host, uint16_t &port, bool &eof) {
-        uint8_t buf[BUF_SIZE];
         std::vector<uint8_t> plain;
         asio::error_code ec;
         bool has_zero_chunk;
-        int ret;
 
+        eof = false;
         while (true) {
             size_t nbytes = 0;
-            if (!crypto_ctx_->HasPending()) {
-                nbytes = co_await \
-                    client_.socket.async_read_some(
-                        asio::buffer(buf, BUF_SIZE),
-                        asio::redirect_error(asio::use_awaitable, ec)
-                    );
-                if (ec) {
-                    if (ec == asio::error::eof) {
-                        SPDLOG_DEBUG("session {} from {} tcp stream meets eof", uid_, endpoint_);
-                        eof = true;
-                    } else {
-                        SPDLOG_ERROR("session {} from {} tcp read error, {}", uid_, endpoint_, ec.message());
-                    }
-                    co_return ERROR;
-                }
 
-                if (obfs_) {
-                    ret = obfs_->DeObfsRequest(buf, nbytes);
-                    if (ret < 0) {
-                        SPDLOG_ERROR("session {} from {} handshake deobfs failed", uid_, endpoint_);
-                        co_return ERROR;
-                    } else if (ret == 0) {
-                        SPDLOG_TRACE("session {} from {} handshake deobfs need more", uid_, endpoint_);
-                        continue;
-                    }
-                    nbytes = ret;
+            nbytes = co_await client_.stream->AsyncReadSome(plain, has_zero_chunk, ec);
+            if (ec) {
+                if (ec == asio::error::eof) {
+                    SPDLOG_DEBUG("session {} from {} tcp stream meets eof", uid_, endpoint_);
+                    eof = true;
+                } else {
+                    SPDLOG_ERROR("session {} from {} tcp read error, {}", uid_, endpoint_, ec.message());
                 }
-            }
-            ret = crypto_ctx_->DecryptSome(plain, buf, nbytes, has_zero_chunk);
-            if (ret) {
-                SPDLOG_ERROR("session {} from {} handshake decrypt failed", uid_, endpoint_);
                 co_return ERROR;
             }
 
@@ -308,43 +300,21 @@ private:
     asio::awaitable<void> DoForwardC2T() {
         auto self{shared_from_this()};
         asio::error_code ec;
-        uint8_t buf[BUF_SIZE];
 
         while (true) {
             size_t nbytes = 0;
             bool has_zero_chunk = false;
-            int ret;
 
             if (client_.buffer.empty() && !client_.shutdown_after_forward) {
                 SPDLOG_TRACE("session {} from {} client reading", uid_, endpoint_);
-                nbytes = co_await \
-                    client_.socket.async_read_some(
-                        asio::buffer(buf, BUF_SIZE),
-                        asio::redirect_error(asio::use_awaitable, ec)
-                    );
+                nbytes = \
+                    co_await client_.stream->AsyncReadSome(client_.buffer, has_zero_chunk, ec);
                 if (ec) {
                     if (snell_v2_ || ec != asio::error::eof) {
                         SPDLOG_ERROR("session {} from {} client read error, {}", uid_, endpoint_, ec.message());
                     } else {
                         SPDLOG_INFO("session {} from {} client read meets eof", uid_, endpoint_);
                     }
-                    break;
-                }
-
-                if (obfs_) {
-                    ret = obfs_->DeObfsRequest(buf, nbytes);
-                    if (ret < 0) {
-                        SPDLOG_ERROR("session {} from {} forward c2s deobfs failed", uid_, endpoint_);
-                        break;
-                    } else if (ret == 0) {
-                        SPDLOG_TRACE("session {} from {} forward c2s deobfs need more", uid_, endpoint_);
-                        continue;
-                    }
-                    nbytes = ret;
-                }
-                ret = crypto_ctx_->DecryptSome(client_.buffer, buf, nbytes, has_zero_chunk);
-                if (ret) {
-                    SPDLOG_ERROR("session {} from {} decrypt client error", uid_, endpoint_);
                     break;
                 }
             }
@@ -387,7 +357,6 @@ private:
         while (true) {
             size_t nbytes = 0;
             bool add_zero_chunk = false;
-            int ret;
 
             SPDLOG_TRACE("session {} from {} target reading", uid_, endpoint_);
             nbytes = co_await \
@@ -406,25 +375,11 @@ private:
             nbytes += bias;
             bias = 0;
 
-            ret = crypto_ctx_->EncryptSome(target_.buffer, buf, nbytes, add_zero_chunk && snell_v2_);
-            if (ret) {
-                SPDLOG_ERROR("session {} from {} encrypt target error", uid_, endpoint_);
-                break;
-            }
-            if (obfs_) {
-                obfs_->ObfsResponse(target_.buffer);
-            }
-
-            co_await asio::async_write(
-                client_.socket,
-                asio::buffer(target_.buffer),
-                asio::redirect_error(asio::use_awaitable, ec)
-            );
+            co_await client_.stream->AsyncWrite(buf, nbytes, add_zero_chunk && snell_v2_, ec);
             if (ec) {
                 SPDLOG_ERROR("session {} from {} client write error, {}", uid_, endpoint_, ec.message());
                 break;
             }
-            target_.buffer.clear();
             if (add_zero_chunk) {
                 SPDLOG_DEBUG("session {} from {} terminates forwarding s2c", uid_, endpoint_);
                 break;
@@ -452,24 +407,11 @@ private:
         nbytes = 2 + static_cast<size_t>(buf[1]);
         SPDLOG_DEBUG("session {} from {} write error back, {}", uid_, endpoint_, emsg);
 
-        int ret = crypto_ctx_->EncryptSome(target_.buffer, buf, nbytes, true);
-        if (ret) {
-            SPDLOG_ERROR("session {} from {} encrypt error message error", uid_, endpoint_);
-            goto __clean_up;
-        }
-        if (obfs_) {
-            obfs_->ObfsResponse(target_.buffer);
-        }
-
-        co_await asio::async_write(
-            client_.socket, asio::buffer(target_.buffer),
-            asio::redirect_error(asio::use_awaitable, ec)
-        );
-        if (ret) {
+        co_await client_.stream->AsyncWrite(buf, nbytes, true, ec);
+        if (ec) {
             SPDLOG_ERROR("session {} from {} write error error, {}", uid_, endpoint_, ec.message());
         }
 
-    __clean_up:
         target_.Reset(false);
         client_.Reset();
     }
@@ -477,32 +419,19 @@ private:
     asio::awaitable<void> DoSendPongBack() {
         uint8_t pong[1] = {0x00};
         asio::error_code ec;
-        int ret = crypto_ctx_->EncryptSome(target_.buffer, pong, sizeof pong, true);
-        if (ret) {
-            SPDLOG_ERROR("session {} from {} encrypt pong error", uid_, endpoint_);
-            co_return;
-        }
-        if (obfs_) {
-            obfs_->ObfsResponse(target_.buffer);
-        }
 
-        co_await asio::async_write(
-            client_.socket, asio::buffer(target_.buffer),
-            asio::redirect_error(asio::use_awaitable, ec)
-        );
-        if (ret) {
+        co_await client_.stream->AsyncWrite(pong, sizeof pong, true, ec);
+        if (ec) {
             SPDLOG_ERROR("session {} from {} write pong error, {}", uid_, endpoint_, ec.message());
         }
     }
 
     asio::ip::tcp::socket::executor_type executor_;
-    Peer client_;
-    Peer target_;
+    Client client_;
+    Target target_;
     asio::ip::tcp::resolver resolver_;
     asio::ip::tcp::endpoint endpoint_;
     AsyncLatch latch_;
-    std::shared_ptr<CryptoContext> crypto_ctx_;
-    std::shared_ptr<Obfuscator> obfs_;
     std::string uid_;
     bool snell_v2_ = true;
 };
