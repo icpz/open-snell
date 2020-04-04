@@ -72,6 +72,9 @@ public:
 
     int EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext, size_t plen, bool add_zero_chunk);
     int DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext, size_t clen, bool &has_zero_chunk);
+    bool HasPending() const {
+        return !decrypt_ctx_.buffer.empty();
+    }
 
 private:
 
@@ -191,7 +194,7 @@ int CryptoContextImpl::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *c
     }
 
     has_zero_chunk = false;
-    if (clen == 0) {
+    if (clen == 0 && ctx.buffer.empty()) {
         SPDLOG_TRACE("decrypt context nothing to be done");
         return OK;
     }

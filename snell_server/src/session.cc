@@ -114,31 +114,34 @@ private:
         int ret;
 
         while (true) {
-            size_t nbytes = co_await \
-                client_.socket.async_read_some(
-                    asio::buffer(buf, BUF_SIZE),
-                    asio::redirect_error(asio::use_awaitable, ec)
-                );
-            if (ec) {
-                if (ec == asio::error::eof) {
-                    SPDLOG_DEBUG("session {} from {} tcp stream meets eof", uid_, endpoint_);
-                    eof = true;
-                } else {
-                    SPDLOG_ERROR("session {} from {} tcp read error, {}", uid_, endpoint_, ec.message());
-                }
-                co_return ERROR;
-            }
-
-            if (obfs_) {
-                ret = obfs_->DeObfsRequest(buf, nbytes);
-                if (ret < 0) {
-                    SPDLOG_ERROR("session {} from {} handshake deobfs failed", uid_, endpoint_);
+            size_t nbytes = 0;
+            if (!crypto_ctx_->HasPending()) {
+                nbytes = co_await \
+                    client_.socket.async_read_some(
+                        asio::buffer(buf, BUF_SIZE),
+                        asio::redirect_error(asio::use_awaitable, ec)
+                    );
+                if (ec) {
+                    if (ec == asio::error::eof) {
+                        SPDLOG_DEBUG("session {} from {} tcp stream meets eof", uid_, endpoint_);
+                        eof = true;
+                    } else {
+                        SPDLOG_ERROR("session {} from {} tcp read error, {}", uid_, endpoint_, ec.message());
+                    }
                     co_return ERROR;
-                } else if (ret == 0) {
-                    SPDLOG_TRACE("session {} from {} handshake deobfs need more", uid_, endpoint_);
-                    continue;
                 }
-                nbytes = ret;
+
+                if (obfs_) {
+                    ret = obfs_->DeObfsRequest(buf, nbytes);
+                    if (ret < 0) {
+                        SPDLOG_ERROR("session {} from {} handshake deobfs failed", uid_, endpoint_);
+                        co_return ERROR;
+                    } else if (ret == 0) {
+                        SPDLOG_TRACE("session {} from {} handshake deobfs need more", uid_, endpoint_);
+                        continue;
+                    }
+                    nbytes = ret;
+                }
             }
             ret = crypto_ctx_->DecryptSome(plain, buf, nbytes, has_zero_chunk);
             if (ret) {
