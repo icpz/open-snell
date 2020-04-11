@@ -52,7 +52,7 @@ private:
         }
 
         void DeriveKey(const uint8_t *salt, std::string_view psk) {
-            int ret = \
+            [[maybe_unused]] int ret = \
                 crypto_pwhash(
                     key.data(), key.size(), psk.data(), psk.size(),
                     salt, 3ULL, 0x2000ULL, crypto_pwhash_ALG_ARGON2ID13
