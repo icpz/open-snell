@@ -8,6 +8,8 @@ endif (APPLE)
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL 1.1 REQUIRED)
 
+find_package(Threads REQUIRED)
+
 list(APPEND SRCS
     src/server.cc
     src/stream.cc
@@ -26,6 +28,8 @@ list(APPEND DEPS
     asio
     PkgConfig::SODIUM
     OpenSSL::Crypto
+    ${CMAKE_DL_LIBS}
+    Threads::Threads
     )
 
 add_executable(snell-server ${SRCS})
