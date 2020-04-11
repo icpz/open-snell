@@ -83,8 +83,12 @@ int main(int argc, char *argv[]) {
             }
         }
     } else {
-        listen = args["listen"].as<std::string>();
-        psk = args["key"].as<std::string>();
+        if (args.count("listen")) {
+            listen = args["listen"].as<std::string>();
+        }
+        if (args.count("key")) {
+            psk = args["key"].as<std::string>();
+        }
         if (args.count("obfs")) {
             auto obfs = args["obfs"].as<std::string>();
             auto obfs_host = args["obfs-host"].as<std::string>();
