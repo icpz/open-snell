@@ -82,8 +82,16 @@ public:
     asio::error_code Reset(bool flag = false) noexcept {
         asio::error_code ec;
         int fds[2];
-        reader_.close();
-        writer_.close();
+
+        reader_.close(ec);
+        if (ec) {
+            return ec;
+        }
+
+        writer_.close(ec);
+        if (ec) {
+            return ec;
+        }
 
         if (::pipe(fds)) {
             ec.assign(errno, asio::system_category());
@@ -94,7 +102,7 @@ public:
         if (ec) {
             return ec;
         }
-        writer_.assign(fds[1]);
+        writer_.assign(fds[1], ec);
         if (ec) {
             return ec;
         }
