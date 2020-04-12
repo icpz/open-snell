@@ -1,6 +1,6 @@
-FROM debian:buster
-
-COPY . /app/source
+FROM debian:buster AS snell-build-stage
+WORKDIR /app/source
+COPY . .
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
     cmake \
@@ -14,13 +14,19 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libc++abi-7-dev \
     pkg-config \
     && export CC=clang-7 CXX=clang++-7 CXXFLAGS=-stdlib=libc++ \
-    && cd /app/source \
     && rm -rf build && mkdir -p build && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release .. \
     && make -j`nproc` \
-    && cp snell_server/snell-server /usr/bin/ \
-    && apt-get purge --auto-remove -y cmake git pkg-config clang-7 make libssl-dev \
-    && rm -rf /var/lib/apt/lists/* /app/source/build
+    && cp snell_server/snell-server /usr/bin/
+
+
+FROM debian:buster
+COPY --from=snell-build-stage /app/source/build/snell_server/snell-server /usr/bin/
+
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    libsodium23 \
+    libc++1-7 \
+    libc++abi1-7
 
 ENTRYPOINT [ "snell-server" ]
 CMD [ "-h" ]
