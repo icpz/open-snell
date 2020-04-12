@@ -29,8 +29,10 @@ public:
     virtual int Encrypt(uint8_t *ctext, size_t *clen, const uint8_t *ptext, size_t plen, const uint8_t *nonce, const uint8_t *key) const = 0;
     virtual int Decrypt(uint8_t *ptext, size_t *plen, const uint8_t *ctext, size_t clen, const uint8_t *nonce, const uint8_t *key) const = 0;
 
-    virtual size_t SaltSize() const { return 16U; }
-    virtual size_t KeySize() const { return 32U; }
-    virtual size_t NonceSize() const { return 12U; }
+    virtual const char *Name() const noexcept = 0;
+
+    virtual size_t SaltSize() const noexcept { return 16U; }
+    virtual size_t KeySize() const noexcept { return 32U; }
+    virtual size_t NonceSize() const noexcept { return 12U; }
 };
 

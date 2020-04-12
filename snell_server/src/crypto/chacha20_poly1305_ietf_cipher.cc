@@ -48,6 +48,10 @@ public:
         }
         return ret;
     }
+
+    const char *Name() const noexcept override {
+        return "CHACHA20-POLY1305-IETF";
+    }
 };
 
 std::shared_ptr<Cipher> NewChacha20Poly1305Ietf() {

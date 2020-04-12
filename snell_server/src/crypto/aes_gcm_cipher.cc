@@ -63,6 +63,10 @@ public:
         return !ret;
     }
 
+    const char *Name() const noexcept override {
+        return "AES-128-GCM";
+    }
+
 private:
     EVP_CIPHER_CTX *ctx_;
 };
