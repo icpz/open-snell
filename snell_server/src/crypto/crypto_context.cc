@@ -90,6 +90,7 @@ CryptoContextImpl::CryptoContextImpl(CipherPtr cipher, std::string_view psk, Cip
     : cipher_{cipher}, fallback_{fallback}, psk_{psk}, cipher_selected_{false},
       encrypt_ctx_{cipher_->KeySize(), cipher_->NonceSize()},
       decrypt_ctx_{cipher_->KeySize(), cipher_->NonceSize()} {
+    SPDLOG_DEBUG("crypto context preferred cipher {}, fallback {}", cipher_->Name(), fallback_->Name());
 }
 
 CryptoContextImpl::~CryptoContextImpl() {
@@ -118,7 +119,7 @@ int CryptoContextImpl::EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *p
         SPDLOG_TRACE("encrypt context initializing done");
         if (!cipher_selected_) {
             cipher_selected_ = true;
-            SPDLOG_DEBUG("encrypt context default cipher selected");
+            SPDLOG_DEBUG("encrypt context default cipher {} selected", cipher_->Name());
         }
     }
 
@@ -236,16 +237,16 @@ int CryptoContextImpl::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *c
             );
         if (ret) {
             if (!cipher_selected_ && fallback_) {
-                SPDLOG_DEBUG("decrypt context retry with fallback cipher");
+                SPDLOG_DEBUG("decrypt context failed with cipher {}, retry with fallback {}", cipher_->Name(), fallback_->Name());
                 cipher_ = fallback_;
                 fallback_ = nullptr;
                 continue;
             }
-            SPDLOG_WARN("cipher decrypt chunk size failed with {}", ret);
+            SPDLOG_WARN("cipher {} decrypt chunk size failed with {}", cipher_->Name(), ret);
             break;
         }
         if (!cipher_selected_) {
-            SPDLOG_DEBUG("decrypt context cipher selected");
+            SPDLOG_DEBUG("decrypt context cipher {} selected", cipher_->Name());
             cipher_selected_ = true;
         }
         curr_chunk_size = ntohs(curr_chunk_size);

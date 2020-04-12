@@ -317,28 +317,31 @@ private:
                     }
                     break;
                 }
+                SPDLOG_TRACE("session {} from {} client read {} bytes", uid_, endpoint_, nbytes);
             }
 
             if (!client_.buffer.empty()) {
-                co_await asio::async_write(
-                    target_.socket,
-                    asio::buffer(client_.buffer),
-                    asio::redirect_error(asio::use_awaitable, ec)
-                );
+                size_t nbytes = \
+                    co_await asio::async_write(
+                        target_.socket,
+                        asio::buffer(client_.buffer),
+                        asio::redirect_error(asio::use_awaitable, ec)
+                    );
                 if (ec) {
                     SPDLOG_ERROR("session {} from {} target write error, {}", uid_, endpoint_, ec.message());
                     break;
                 }
+                SPDLOG_TRACE("session {} from {} write to target {} bytes", uid_, endpoint_, nbytes);
                 client_.buffer.clear();
             }
             if (has_zero_chunk || client_.shutdown_after_forward) {
-                SPDLOG_DEBUG("session {} from {} terminates forwarding c2s", uid_, endpoint_);
+                SPDLOG_DEBUG("session {} from {} terminates forwarding client -> target", uid_, endpoint_);
                 break;
             }
         }
         target_.socket.shutdown(asio::ip::tcp::socket::shutdown_send, ec);
         if (ec) {
-            SPDLOG_WARN("session {} from {} target shutdown send failed, {}", uid_, endpoint_, ec.message());
+            SPDLOG_DEBUG("session {} from {} target shutdown send failed, {}", uid_, endpoint_, ec.message());
         }
         ec = co_await latch_.AsyncCountDown();
         if (ec) {
@@ -372,18 +375,20 @@ private:
                 SPDLOG_INFO("session {} from {} target read meets eof", uid_, endpoint_);
                 add_zero_chunk = true;
             }
+            SPDLOG_TRACE("session {} from {} target read {} bytes", uid_, endpoint_, nbytes);
             nbytes += bias;
             bias = 0;
 
-            co_await client_.stream->AsyncWrite(buf, nbytes, add_zero_chunk && snell_v2_, ec);
+            nbytes = co_await client_.stream->AsyncWrite(buf, nbytes, add_zero_chunk && snell_v2_, ec);
             if (ec) {
                 SPDLOG_ERROR("session {} from {} client write error, {}", uid_, endpoint_, ec.message());
                 break;
             }
             if (add_zero_chunk) {
-                SPDLOG_DEBUG("session {} from {} terminates forwarding s2c", uid_, endpoint_);
+                SPDLOG_DEBUG("session {} from {} terminates forwarding target -> client", uid_, endpoint_);
                 break;
             }
+            SPDLOG_TRACE("session {} from {} write to client {} bytes", uid_, endpoint_, nbytes);
         }
         target_.socket.shutdown(asio::ip::tcp::socket::shutdown_receive, ec);
         if (ec) {
