@@ -41,6 +41,59 @@ make
 
 The binary is produced at `build/snell_server/snell-server`
 
+# Docker Image
+
+For users of amd64 architecture, the docker image is prebuilt [here](https://hub.docker.com/r/icpz/snell-server).
+
+For other platforms, please build the image locally.
+
+## Basic Usage
+
+Pull the image (** only valid for amd64 arch **)
+
+```bash
+docker pull icpz/snell-server
+```
+
+Start server
+
+```bash
+export SN_LISTEN_PORT=18888
+export SN_PSK=this-is-password
+
+docker run -t --rm -p $SN_LISTEN_PORT:$SN_LISTEN_PORT icpz/snell-server -l 0.0.0.0:$SN_LISTEN_PORT -k "$SN_PSK" --obfs=tls
+```
+
+## With docker-compose
+
+Prepare for a `docker-compose.yml` file:
+
+```yaml
+version: '3'
+
+services:
+  snell-server:
+    image: icpz/snell-server
+    container_name: snell-server
+    ports:
+      - "127.0.0.1:${SN_LISTEN_PORT}:${SN_LISTEN_PORT}"
+    command: [ "-l", "0.0.0.0:${SN_LISTEN_PORT}", "-k", "${SN_PSK}", "--obfs", "${SN_OBFS}" ]
+```
+
+Compose a `.env` file in the same directory:
+
+```bash
+SN_LISTEN_PORT=18888
+SN_PSK=this-is-password
+SN_OBFS=none
+```
+
+Start up:
+
+```bash
+docker-compose up -d
+```
+
 # License
 
 ```
