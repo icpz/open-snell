@@ -13,9 +13,3 @@ mkdir -p $PKGDIR/lib $PKGDIR/usr/bin
 cp $LIB_DEPS $PKGDIR/lib
 cp $USR_LIB_DEPS $PKGDIR/lib
 cp $BINS $PKGDIR/usr/bin
-
-cd $PKGDIR
-
-rm -f /app/pkg.tar
-tar cf /app/pkg.tar ./
-

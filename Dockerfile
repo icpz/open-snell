@@ -21,9 +21,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 
 
 FROM busybox:glibc
-COPY --from=snell-build-stage /app/pkg.tar /tmp/pkg.tar
-
-RUN tar -xvf /tmp/pkg.tar -C / && rm -f /tmp/pkg.tar
+COPY --from=snell-build-stage /app/pkg /
 
 ENTRYPOINT [ "snell-server" ]
 CMD [ "-h" ]
