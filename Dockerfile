@@ -17,16 +17,13 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && rm -rf build && mkdir -p build && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release .. \
     && make -j`nproc` \
-    && cp snell_server/snell-server /usr/bin/
+    && /app/source/docker/package.sh
 
 
-FROM debian:buster
-COPY --from=snell-build-stage /app/source/build/snell_server/snell-server /usr/bin/
+FROM busybox:glibc
+COPY --from=snell-build-stage /app/pkg.tar /tmp/pkg.tar
 
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    libsodium23 \
-    libc++1-7 \
-    libc++abi1-7
+RUN tar -xvf /tmp/pkg.tar -C / && rm -f /tmp/pkg.tar
 
 ENTRYPOINT [ "snell-server" ]
 CMD [ "-h" ]
