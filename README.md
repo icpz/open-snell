@@ -49,7 +49,7 @@ For other platforms, please build the image locally.
 
 ## Basic Usage
 
-Pull the image (** only valid for amd64 arch **)
+Pull the image (**only valid for amd64 arch**)
 
 ```bash
 docker pull icpz/snell-server
