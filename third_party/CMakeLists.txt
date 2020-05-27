@@ -5,7 +5,7 @@ include(ExternalProject)
 
 ExternalProject_Add(asio_project
     GIT_REPOSITORY    https://github.com/chriskohlhoff/asio
-    GIT_TAG           asio-1-14-0
+    GIT_TAG           asio-1-16-1
     CONFIGURE_COMMAND ""
     BUILD_COMMAND     ""
     INSTALL_COMMAND   ""
@@ -39,7 +39,7 @@ target_compile_options(cxxopts INTERFACE "-Wno-return-std-move")
 
 ExternalProject_Add(spdlog_project
     GIT_REPOSITORY    https://github.com/gabime/spdlog
-    GIT_TAG           v1.5.0
+    GIT_TAG           v1.6.1
     CMAKE_ARGS        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                       -DCMAKE_BUILD_TYPE=Release
                       -DSPDLOG_BUILD_EXAMPLE=OFF
