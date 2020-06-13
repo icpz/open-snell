@@ -73,7 +73,11 @@ public:
     int EncryptSome(std::vector<uint8_t> &ctext, const uint8_t *ptext, size_t plen, bool add_zero_chunk) override;
     int DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *ctext, size_t clen, bool &has_zero_chunk) override;
     bool HasPending() const override {
-        return decrypt_ctx_.buffer.size() > sizeof(uint16_t) + TAG_SIZE;
+        size_t expected_ctext_size = sizeof(uint16_t) + TAG_SIZE;
+        if (expected_payload_) {
+            expected_ctext_size += expected_payload_ + TAG_SIZE;
+        }
+        return decrypt_ctx_.buffer.size() > expected_ctext_size;
     }
 
 private:
@@ -82,12 +86,14 @@ private:
     CipherPtr fallback_;
     std::string_view psk_;
     bool cipher_selected_;
+    size_t expected_payload_;
     Context encrypt_ctx_;
     Context decrypt_ctx_;
 };
 
 CryptoContextImpl::CryptoContextImpl(CipherPtr cipher, std::string_view psk, CipherPtr fallback)
-    : cipher_{cipher}, fallback_{fallback}, psk_{psk}, cipher_selected_{false},
+    : cipher_{cipher}, fallback_{fallback}, psk_{psk},
+      cipher_selected_{false}, expected_payload_{0},
       encrypt_ctx_{cipher_->KeySize(), cipher_->NonceSize()},
       decrypt_ctx_{cipher_->KeySize(), cipher_->NonceSize()} {
     SPDLOG_DEBUG("crypto context preferred cipher {}, fallback {}", cipher_->Name(), fallback_->Name());
@@ -224,6 +230,7 @@ int CryptoContextImpl::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *c
         uint16_t curr_chunk_size;
         size_t mlen;
         size_t excepted_size = sizeof curr_chunk_size + TAG_SIZE;
+        expected_payload_ = 0;
         if (remained_size < excepted_size) {
             SPDLOG_TRACE("decrypt context need more data");
             break;
@@ -254,6 +261,7 @@ int CryptoContextImpl::DecryptSome(std::vector<uint8_t> &ptext, const uint8_t *c
             excepted_size += curr_chunk_size + TAG_SIZE;
         }
         if (remained_size < excepted_size) {
+            expected_payload_ = curr_chunk_size;
             SPDLOG_TRACE("decrypt context need more data");
             break;
         }
