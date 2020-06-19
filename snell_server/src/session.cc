@@ -321,17 +321,18 @@ private:
             }
 
             if (!client_.buffer.empty()) {
-                size_t nbytes = \
-                    co_await asio::async_write(
-                        target_.socket,
-                        asio::buffer(client_.buffer),
-                        asio::redirect_error(asio::use_awaitable, ec)
-                    );
-                if (ec) {
-                    SPDLOG_ERROR("session {} from {} target write error, {}", uid_, endpoint_, ec.message());
-                    break;
+                if (target_.socket.is_open()) {
+                    [[maybe_unused]] size_t nbytes = \
+                        co_await asio::async_write(
+                            target_.socket,
+                            asio::buffer(client_.buffer),
+                            asio::redirect_error(asio::use_awaitable, ec)
+                        );
+                    if (ec) {
+                        SPDLOG_WARN("session {} from {} target write error, {}", uid_, endpoint_, ec.message());
+                    }
+                    SPDLOG_TRACE("session {} from {} write to target {} bytes", uid_, endpoint_, nbytes);
                 }
-                SPDLOG_TRACE("session {} from {} write to target {} bytes", uid_, endpoint_, nbytes);
                 client_.buffer.clear();
             }
             if (has_zero_chunk || client_.shutdown_after_forward) {
