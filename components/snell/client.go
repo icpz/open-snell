@@ -15,22 +15,22 @@
 package snell
 
 import (
-	"fmt"
-	"net"
-	"strconv"
+    "fmt"
+    "net"
+    "strconv"
 
-	obfs "github.com/Dreamacro/clash/component/simple-obfs"
-	"github.com/Dreamacro/clash/component/snell"
+    obfs "github.com/Dreamacro/clash/component/simple-obfs"
+    "github.com/Dreamacro/clash/component/snell"
 )
 
-type Snell struct {
+type SnellClient struct {
     server string
     psk []byte
     obfs string
     obfsHost string
 }
 
-func (s *Snell) StreamConn(c net.Conn, target string) (net.Conn, error) {
+func (s *SnellClient) StreamConn(c net.Conn, target string) (net.Conn, error) {
     switch s.obfs {
     case "tls":
         c = obfs.NewTLSObfs(c, s.obfsHost)
@@ -45,7 +45,7 @@ func (s *Snell) StreamConn(c net.Conn, target string) (net.Conn, error) {
     return c, err
 }
 
-func (s *Snell) Dial(target string) (net.Conn, error) {
+func (s *SnellClient) Dial(target string) (net.Conn, error) {
     c, err := net.Dial("tcp", s.server)
     if err != nil {
         return nil, fmt.Errorf("failed to connect to snell server %s", err.Error())
@@ -54,7 +54,7 @@ func (s *Snell) Dial(target string) (net.Conn, error) {
     return s.StreamConn(c, target)
 }
 
-func NewSnell(server, psk, obfs, obfsHost string) (*Snell, error) {
+func NewSnellClient(server, psk, obfs, obfsHost string) (*SnellClient, error) {
     if obfs != "tls" && obfs != "http" && obfs != "" {
         return nil, fmt.Errorf("invalid snell obfs type %s", obfs)
     }
@@ -63,7 +63,7 @@ func NewSnell(server, psk, obfs, obfsHost string) (*Snell, error) {
         obfsHost = "www.bing.com"
     }
 
-    return &Snell {
+    return &SnellClient {
         server: server,
         psk: []byte(psk),
         obfs: obfs,
