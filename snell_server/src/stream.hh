@@ -31,6 +31,7 @@ public:
 
     virtual asio::awaitable<size_t> AsyncReadSome(std::vector<uint8_t> &buf, bool &has_zero_chunk, asio::error_code &ec) = 0;
     virtual asio::awaitable<size_t> AsyncWrite(const uint8_t *buf, size_t len, bool add_zero_chunk, asio::error_code &ec) = 0;
+    virtual void Shutdown(asio::ip::tcp::socket::shutdown_type type, asio::error_code &ec) = 0;
 
     static std::shared_ptr<AsyncSnellStream>
         NewServer(

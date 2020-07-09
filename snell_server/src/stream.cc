@@ -24,7 +24,7 @@
 
 class AsyncSnellStreamImpl : public AsyncSnellStream {
 public:
-    enum { BUF_SIZE = 8192 };
+    enum { BUF_SIZE = 20 * 1024 };
 
     AsyncSnellStreamImpl(
         asio::ip::tcp::socket socket,
@@ -40,6 +40,7 @@ public:
 
     asio::awaitable<size_t> AsyncReadSome(std::vector<uint8_t> &buf, bool &has_zero_chunk, asio::error_code &ec) override;
     asio::awaitable<size_t> AsyncWrite(const uint8_t *buf, size_t len, bool add_zero_chunk, asio::error_code &ec) override;
+    void Shutdown(asio::ip::tcp::socket::shutdown_type type, asio::error_code &ec) override;
 
 private:
     asio::ip::tcp::socket socket_;
@@ -122,6 +123,10 @@ asio::awaitable<size_t>
         }
         co_return nbytes;
     }
+
+void AsyncSnellStreamImpl::Shutdown(asio::ip::tcp::socket::shutdown_type type, asio::error_code &ec) {
+    socket_.shutdown(type, ec);
+}
 
 std::shared_ptr<AsyncSnellStream>
     AsyncSnellStream::NewServer(

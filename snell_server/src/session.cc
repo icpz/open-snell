@@ -71,7 +71,7 @@ class SnellServerSessionImpl :
         asio::ip::tcp::socket socket;
     };
 
-    enum { BUF_SIZE = 8192 };
+    enum { BUF_SIZE = 20 * 1024 };
 
 public:
     SnellServerSessionImpl(
@@ -394,6 +394,9 @@ private:
         target_.socket.shutdown(asio::ip::tcp::socket::shutdown_receive, ec);
         if (ec) {
             SPDLOG_DEBUG("session {} from {} target shutdown receive failed, {}", uid_, endpoint_, ec.message());
+        }
+        if (!snell_v2_) {
+            client_.stream->Shutdown(asio::ip::tcp::socket::shutdown_both, ec);
         }
         ec = co_await latch_.AsyncCountDown();
         if (ec) {
