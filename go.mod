@@ -1,4 +1,4 @@
-module open-snell
+module github.com/icpz/open-snell
 
 go 1.14
 

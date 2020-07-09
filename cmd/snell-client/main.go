@@ -26,8 +26,8 @@ import (
     log "github.com/golang/glog"
     "gopkg.in/ini.v1"
 
-    "open-snell/components/snell"
-    "open-snell/components/socks5"
+    "github.com/icpz/open-snell/components/snell"
+    "github.com/icpz/open-snell/components/socks5"
 )
 
 var (
