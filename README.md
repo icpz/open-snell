@@ -4,9 +4,7 @@ An open source port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
-Currently the `snell-server` functions as the latest snell v2.0, **WITH** encryption method auto-negotiation and v1 compatibility.
-
-~~The encryption method is `aes-128-gcm` fixed, so~~ please update the client to the latest version.
+Currently only snell v1 is supported.
 
 # Build
 
@@ -22,30 +20,35 @@ Only tested on macOS.
 
 # clone and enter the repo
 
-go build ./cmd/snell-client
+make
 
 ```
 
-The binary is produced at `./snell-client`
+The binaries are produced at `./build/snell-{server,client}`
 
 # Usage
 
 An ini file is needed:
 
 ```ini
-# snell-client.conf
+# snell.conf
 [snell-client]
 listen = 0.0.0.0:1234
 server = 1.2.3.4:5678
 psk = psk
 obfs = tls
 obfs-host = www.bing.com
+
+[snell-server]
+listen = 0.0.0.0:5678
+psk = psk
+obfs = tls
 ```
 
-Start the `snell-client`:
+Start the `snell-*`:
 
 ```bash
-./snell-client -c ./snell-client.conf
+./snell-{server,client} -c ./snell.conf
 ```
 
 # License
