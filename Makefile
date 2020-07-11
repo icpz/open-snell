@@ -1,6 +1,6 @@
 BINDIR=build
 PKGDIR=$(CURDIR)
-GOBUILD=go build
+GOBUILD=CGO_ENABLED=0 go build -trimpath -ldflags '-w -s'
 
 all: server client
 
