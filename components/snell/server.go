@@ -19,7 +19,6 @@ import (
     "fmt"
     "io"
     "net"
-    "time"
     "strconv"
     "syscall"
 
@@ -28,6 +27,7 @@ import (
     "golang.org/x/crypto/chacha20poly1305"
 
     obfs "github.com/icpz/open-snell/components/simple-obfs"
+    "github.com/icpz/open-snell/components/utils"
 )
 
 const (
@@ -164,23 +164,6 @@ func (s *SnellServer) handleSnell(conn net.Conn) {
     }
 
     conn.Write([]byte{ResponseTunnel})
-    relay(conn, tc)
+    utils.Relay(conn, tc)
     log.V(1).Infof("Session from %s done", conn.RemoteAddr().String())
 }
-
-func relay(left, right net.Conn) {
-    ch := make(chan error)
-
-    go func() {
-        buf := make([]byte, 8192)
-        _, err := io.CopyBuffer(left, right, buf)
-        left.SetReadDeadline(time.Now())
-        ch <- err
-    }()
-
-    buf := make([]byte, 8192)
-    io.CopyBuffer(right, left, buf)
-    right.SetReadDeadline(time.Now())
-    <-ch
-}
-

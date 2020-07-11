@@ -17,10 +17,8 @@ package main
 import (
     "flag"
     "net"
-    "io"
     "os"
     "os/signal"
-    "time"
     "syscall"
 
     log "github.com/golang/glog"
@@ -28,6 +26,7 @@ import (
 
     "github.com/icpz/open-snell/components/snell"
     "github.com/icpz/open-snell/components/socks5"
+    "github.com/icpz/open-snell/components/utils"
 )
 
 var (
@@ -93,7 +92,7 @@ func main() {
             return
         }
 
-        relay(client, target)
+        utils.Relay(client, target)
         log.V(1).Infof("Session from %s done\n", client.RemoteAddr().String())
     }
 
@@ -107,20 +106,4 @@ func main() {
     <-sigCh
 
     ls.Close()
-}
-
-func relay(left, right net.Conn) {
-    ch := make(chan error)
-
-    go func() {
-        buf := make([]byte, 8192)
-        _, err := io.CopyBuffer(left, right, buf)
-        left.SetReadDeadline(time.Now())
-        ch <- err
-    }()
-
-    buf := make([]byte, 8192)
-    io.CopyBuffer(right, left, buf)
-    right.SetReadDeadline(time.Now())
-    <-ch
 }
