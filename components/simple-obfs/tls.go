@@ -70,7 +70,7 @@ func (tos *TLSObfsServer) read(b []byte, skipSize int) (int, error) {
 // skip SNI & other TLS extensions
 func (tos *TLSObfsServer) skipOtherExts() error {
     // SNI first
-    buf := make([]byte, 65536)
+    buf := make([]byte, 256)
     _, err := tos.read(buf, 7)
     if err != nil {
         return err
