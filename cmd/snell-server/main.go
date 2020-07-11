@@ -34,23 +34,29 @@ var (
 )
 
 func init() {
-    flag.StringVar(&configFile, "c", "./snell-server.conf", "configuration file path")
+    flag.StringVar(&configFile, "c", "", "configuration file path")
+    flag.StringVar(&listenAddr, "l", "0.0.0.0:18888", "server listen address")
+    flag.StringVar(&obfsType, "obfs", "", "obfs type")
+    flag.StringVar(&psk, "k", "", "pre-shared key")
 
     flag.Parse()
     flag.Set("logtostderr", "true")
 
-    cfg, err := ini.Load(configFile)
-    if err != nil {
-        log.Fatalf("Failed to load config file %s, %s\n", configFile, err.Error())
-    }
-    sec, err := cfg.GetSection("snell-server")
-    if err != nil {
-        log.Fatalf("Section 'snell-server' not found in config file %s\n", configFile)
-    }
+    if configFile != "" {
+        log.Infof("Configuration file specified, ignoring other flags\n")
+        cfg, err := ini.Load(configFile)
+        if err != nil {
+            log.Fatalf("Failed to load config file %s, %s\n", configFile, err.Error())
+        }
+        sec, err := cfg.GetSection("snell-server")
+        if err != nil {
+            log.Fatalf("Section 'snell-server' not found in config file %s\n", configFile)
+        }
 
-    listenAddr = sec.Key("listen").String()
-    obfsType   = sec.Key("obfs").String()
-    psk        = sec.Key("psk").String()
+        listenAddr = sec.Key("listen").String()
+        obfsType   = sec.Key("obfs").String()
+        psk        = sec.Key("psk").String()
+    }
 }
 
 func main() {

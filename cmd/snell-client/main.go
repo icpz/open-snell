@@ -40,27 +40,40 @@ var (
 )
 
 func init() {
-    flag.StringVar(&configFile, "c", "./snell-client.conf", "configuration file path")
+    flag.StringVar(&configFile, "c", "", "configuration file path")
+    flag.StringVar(&listenAddr, "l", "0.0.0.0:18888", "client listen address")
+    flag.StringVar(&serverAddr, "s", "", "snell server address")
+    flag.StringVar(&obfsType, "obfs", "", "obfs type")
+    flag.StringVar(&obfsHost, "obfs-host", "bing.com", "obfs host")
+    flag.StringVar(&psk, "k", "", "pre-shared key")
 
     flag.Parse()
     flag.Set("logtostderr", "true")
 
-    cfg, err := ini.Load(configFile)
-    if err != nil {
-        log.Fatalf("Failed to load config file %s, %s\n", configFile, err.Error())
-    }
-    sec, err := cfg.GetSection("snell-client")
-    if err != nil {
-        log.Fatalf("Section 'snell-client' not found in config file %s\n", configFile)
+    if configFile != "" {
+        log.Infof("Configuration file specified, ignoring other flags\n")
+        cfg, err := ini.Load(configFile)
+        if err != nil {
+            log.Fatalf("Failed to load config file %s, %s\n", configFile, err.Error())
+        }
+        sec, err := cfg.GetSection("snell-client")
+        if err != nil {
+            log.Fatalf("Section 'snell-client' not found in config file %s\n", configFile)
+        }
+
+        listenAddr = sec.Key("listen").String()
+        serverAddr = sec.Key("server").String()
+        obfsType   = sec.Key("obfs").String()
+        obfsHost   = sec.Key("obfs-host").String()
+        psk        = sec.Key("psk").String()
     }
 
-    listenAddr = sec.Key("listen").String()
-    serverAddr = sec.Key("server").String()
-    obfsType   = sec.Key("obfs").String()
-    obfsHost   = sec.Key("obfs-host").String()
-    psk        = sec.Key("psk").String()
+    if serverAddr == "" {
+        log.Fatalf("Invalid emtpy server address.\n")
+    }
 
     if obfsHost == "" {
+        log.Infof("Note: obfs host empty, using default bing.com\n")
         obfsHost = "bing.com"
     }
 }
