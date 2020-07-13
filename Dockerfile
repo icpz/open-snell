@@ -1,28 +1,17 @@
-FROM debian:buster AS snell-build-stage
-WORKDIR /app/source
-COPY . .
 
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    cmake \
-    git \
-    clang-7 \
-    libsodium-dev \
-    libssl-dev \
-    ca-certificates \
-    make \
-    libc++-7-dev \
-    libc++abi-7-dev \
-    pkg-config \
-    && export CC=clang-7 CXX=clang++-7 CXXFLAGS=-stdlib=libc++ \
-    && rm -rf build && mkdir -p build && cd build \
-    && cmake -DCMAKE_BUILD_TYPE=Release .. \
-    && make -j`nproc` \
-    && /app/source/docker/package.sh
+FROM golang:alpine as builder
+ARG target=server
+ENV target=${target}
+
+RUN apk add --no-cache make git
+WORKDIR /src
+COPY . /src
+RUN go mod download && make ${target} && \
+    ln -s snell-${target} ./build/entrypoint
 
 
-FROM busybox:glibc
-COPY --from=snell-build-stage /app/pkg /
+FROM scratch
 
-ENTRYPOINT [ "snell-server" ]
-CMD [ "-h" ]
+COPY --from=builder /src/build /
+ENTRYPOINT [ "/entrypoint" ]
 
