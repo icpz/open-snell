@@ -103,17 +103,23 @@ type reader struct {
     nonce    []byte
     buf      []byte
     leftover []byte
+    fallback cipher.AEAD
 }
 
 // NewReader wraps an io.Reader with AEAD decryption.
-func NewReader(r io.Reader, aead cipher.AEAD) io.Reader { return newReader(r, aead) }
+func NewReader(r io.Reader, aead cipher.AEAD) io.Reader { return newReader(r, aead, nil) }
 
-func newReader(r io.Reader, aead cipher.AEAD) *reader {
+func NewReaderWithFallback(r io.Reader, aead, fallback cipher.AEAD) io.Reader {
+    return newReader(r, aead, fallback)
+}
+
+func newReader(r io.Reader, aead cipher.AEAD, fallback cipher.AEAD) *reader {
     return &reader{
-        Reader: r,
-        AEAD:   aead,
-        buf:    make([]byte, payloadSizeMask+aead.Overhead()),
-        nonce:  make([]byte, aead.NonceSize()),
+        Reader:   r,
+        AEAD:     aead,
+        buf:      make([]byte, payloadSizeMask+aead.Overhead()),
+        nonce:    make([]byte, aead.NonceSize()),
+        fallback: fallback,
     }
 }
 
@@ -126,7 +132,19 @@ func (r *reader) read() (int, error) {
         return 0, err
     }
 
-    _, err = r.Open(buf[:0], r.nonce, buf, nil)
+
+    if r.fallback != nil {
+        tbuf := make([]byte, len(buf))
+        copy(tbuf, buf)
+        _, err = r.Open(buf[:0], r.nonce, tbuf, nil)
+        if err != nil {
+            r.AEAD = r.fallback
+            r.fallback = nil
+            _, err = r.Open(buf[:0], r.nonce, tbuf, nil)
+        }
+    } else {
+        _, err = r.Open(buf[:0], r.nonce, buf, nil)
+    }
     increment(r.nonce)
     if err != nil {
         return 0, err
@@ -223,6 +241,7 @@ type streamConn struct {
     Cipher
     r *reader
     w *writer
+    fallback Cipher
 }
 
 func (c *streamConn) initReader() error {
@@ -235,7 +254,12 @@ func (c *streamConn) initReader() error {
         return err
     }
 
-    c.r = newReader(c.Conn, aead)
+    var fallback cipher.AEAD = nil
+    if c.fallback != nil {
+        fallback, _ = c.fallback.Decrypter(salt)
+    }
+
+    c.r = newReader(c.Conn, aead, fallback)
     return nil
 }
 
@@ -244,6 +268,12 @@ func (c *streamConn) Read(b []byte) (int, error) {
         if err := c.initReader(); err != nil {
             return 0, err
         }
+        n, err := c.r.Read(b)
+        if c.fallback != nil && c.r.fallback == nil { // cipher switched
+            c.Cipher = c.fallback
+            c.fallback = nil
+        }
+        return n, err
     }
     return c.r.Read(b)
 }
@@ -253,6 +283,12 @@ func (c *streamConn) WriteTo(w io.Writer) (int64, error) {
         if err := c.initReader(); err != nil {
             return 0, err
         }
+        n, err := c.r.WriteTo(w)
+        if c.fallback != nil && c.r.fallback == nil { // cipher switched
+            c.Cipher = c.fallback
+            c.fallback = nil
+        }
+        return n, err
     }
     return c.r.WriteTo(w)
 }
@@ -294,3 +330,11 @@ func (c *streamConn) ReadFrom(r io.Reader) (int64, error) {
 
 // NewConn wraps a stream-oriented net.Conn with cipher.
 func NewConn(c net.Conn, ciph Cipher) net.Conn { return &streamConn{Conn: c, Cipher: ciph} }
+
+func NewConnWithFallback(c net.Conn, ciph, fallback Cipher) net.Conn {
+    return &streamConn{
+        Conn: c,
+        Cipher: ciph,
+        fallback: fallback,
+    }
+}

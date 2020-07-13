@@ -97,6 +97,8 @@ func NewSnellServer(listen, psk, obfsType string) (*SnellServer, error) {
 
     bpsk := []byte(psk)
     ss := &SnellServer{l, bpsk, false}
+    ciph := aead.NewAES128GCM(bpsk)
+    fb := aead.NewChacha20Poly1305(bpsk)
     go func() {
         log.Infof("snell server listening at: %s\n", listen)
         for {
@@ -113,7 +115,7 @@ func NewSnellServer(listen, psk, obfsType string) (*SnellServer, error) {
             case "http":
                 c = obfs.NewHTTPObfsServer(c)
             }
-            c = aead.NewConn(c, aead.NewAES128GCM(bpsk))
+            c = aead.NewConnWithFallback(c, ciph, fb)
             go ss.handleSnell(c)
         }
     }()
