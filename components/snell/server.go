@@ -16,23 +16,25 @@ package snell
 
 import (
     "bytes"
+    "errors"
     "fmt"
     "io"
     "net"
     "strconv"
     "syscall"
+    "time"
 
     log "github.com/golang/glog"
-    "github.com/Dreamacro/go-shadowsocks2/shadowaead"
-    "golang.org/x/crypto/chacha20poly1305"
 
     obfs "github.com/icpz/open-snell/components/simple-obfs"
     "github.com/icpz/open-snell/components/utils"
+    "github.com/icpz/open-snell/components/aead"
 )
 
 const (
-    CommandPing    byte = 0
-    CommandConnect byte = 1
+    CommandPing      byte = 0
+    CommandConnect   byte = 1
+    CommandConnectV2 byte = 5
 
     ResponseTunnel byte = 0
     ResponsePong   byte = 1
@@ -111,7 +113,7 @@ func NewSnellServer(listen, psk, obfsType string) (*SnellServer, error) {
             case "http":
                 c = obfs.NewHTTPObfsServer(c)
             }
-            c = shadowaead.NewConn(c, &snellCipher{bpsk, chacha20poly1305.New})
+            c = aead.NewConn(c, aead.NewAES128GCM(bpsk))
             go ss.handleSnell(c)
         }
     }()
@@ -122,48 +124,73 @@ func NewSnellServer(listen, psk, obfsType string) (*SnellServer, error) {
 func (s *SnellServer) handleSnell(conn net.Conn) {
     defer conn.Close()
 
-    target, command, err := s.ServerHandshake(conn)
-    if err != nil {
-        log.Warningf("Failed to handshake %s\n", err.Error())
-        return
-    }
-    log.V(1).Infof("New target from %s to %s\n", conn.RemoteAddr().String(), target)
+    isV2 := true
 
-    if c, ok := conn.(*net.TCPConn); ok {
-        c.SetKeepAlive(true)
-    }
-
-    if command == CommandPing {
-        buf := []byte{ResponsePong}
-        conn.Write(buf)
-        return
-    }
-
-    if command != CommandConnect {
-        log.Errorf("Unknown command 0x%x\n", command)
-        return
-    }
-
-    tc, err := net.Dial("tcp", target)
-    if err != nil {
-        buf := bytes.NewBuffer([]byte{})
-        buf.WriteByte(ResponseError)
-        if e, ok := err.(syscall.Errno); ok {
-            buf.WriteByte(byte(e))
-        } else {
-            buf.WriteByte(byte(0))
+    for isV2 {
+        target, command, err := s.ServerHandshake(conn)
+        if err != nil {
+            log.Warningf("Failed to handshake %s\n", err.Error())
+            break
         }
-        es := err.Error()
-        if len(es) > 250 {
-            es = es[0:250]
+        log.V(1).Infof("New target from %s to %s\n", conn.RemoteAddr().String(), target)
+
+        if c, ok := conn.(*net.TCPConn); ok {
+            c.SetKeepAlive(true)
         }
-        buf.WriteByte(byte(len(es)))
-        buf.WriteString(es)
-        conn.Write(buf.Bytes())
-        return
+
+        if command == CommandPing {
+            buf := []byte{ResponsePong}
+            conn.Write(buf)
+            break
+        }
+
+        if command == CommandConnect {
+            isV2 = false
+        } else if command != CommandConnectV2 {
+            log.Errorf("Unknown command 0x%x\n", command)
+            break
+        }
+
+        tc, err := net.Dial("tcp", target)
+        if err != nil {
+            buf := bytes.NewBuffer([]byte{})
+            buf.WriteByte(ResponseError)
+            if e, ok := err.(syscall.Errno); ok {
+                buf.WriteByte(byte(e))
+            } else {
+                buf.WriteByte(byte(0))
+            }
+            es := err.Error()
+            if len(es) > 250 {
+                es = es[0:250]
+            }
+            buf.WriteByte(byte(len(es)))
+            buf.WriteString(es)
+            conn.Write(buf.Bytes())
+            if isV2 {
+                conn.Write([]byte{})
+            }
+            continue
+        }
+
+        conn.Write([]byte{ResponseTunnel})
+        el, _ := utils.Relay(conn, tc)
+
+        tc.Close()
+        if isV2 {
+            conn.SetReadDeadline(time.Time{})
+            conn.Write([]byte{}) // write zero chunk back
+            buf := make([]byte, 8192)
+            for el == nil {
+                _, err := conn.Read(buf)
+                el = err
+            }
+            if !errors.Is(el, aead.ErrZeroChunk) {
+                log.Warningf("Unexpected error %s, ZERO CHUNK wanted\n", el.Error())
+                break
+            }
+        }
     }
 
-    conn.Write([]byte{ResponseTunnel})
-    utils.Relay(conn, tc)
     log.V(1).Infof("Session from %s done", conn.RemoteAddr().String())
 }

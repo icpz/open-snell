@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  * You should have received a copy of the GNU General Public License
  * along with open-snell.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ */
 
 package utils
 
@@ -20,7 +20,7 @@ import (
     "time"
 )
 
-func Relay(left, right net.Conn) {
+func Relay(left, right net.Conn) (el, er error) {
     ch := make(chan error)
 
     go func() {
@@ -31,7 +31,16 @@ func Relay(left, right net.Conn) {
     }()
 
     buf := make([]byte, 8192)
-    io.CopyBuffer(right, left, buf)
+    _, el = io.CopyBuffer(right, left, buf)
     right.SetReadDeadline(time.Now())
-    <-ch
+    er = <-ch
+
+    if err, ok := el.(net.Error); ok && err.Timeout() {
+        el = nil
+    }
+    if err, ok := er.(net.Error); ok && err.Timeout() {
+        er = nil
+    }
+
+    return
 }
