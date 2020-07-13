@@ -4,7 +4,7 @@ An open source port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
-Currently only snell v1 is supported.
+Currently snell-server supports both v1 and v2, and snell-client only supports v1.
 
 # Build
 
@@ -50,6 +50,10 @@ Start the `snell-*`:
 ```bash
 ./snell-{server,client} -c ./snell.conf
 ```
+
+# Docker image
+
+The auto-built docker image is also available at [icpz/snell-server:golang](https://hub.docker.com/r/icpz/snell-server) and [icpz/snell-client:golang](https://hub.docker.com/r/icpz/snell-client).
 
 # License
 
