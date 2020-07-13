@@ -3,9 +3,11 @@ PKGDIR=$(CURDIR)
 GOBUILD=CGO_ENABLED=0 go build -trimpath -ldflags '-w -s'
 TARGETS := server client
 
+SRCS := $(shell find $(PKGDIR) -name '*.go')
+
 all: $(TARGETS)
 
-$(BINDIR)/%:
+$(BINDIR)/%: $(SRCS)
 	$(GOBUILD) -o $@ $(PKGDIR)/cmd/$(@:$(BINDIR)/%=%)
 
 clean-$(BINDIR)/%:
@@ -15,4 +17,3 @@ clean-$(BINDIR)/%:
 $(TARGETS): $(BINDIR)/snell-$$@
 
 clean: $$(patsubst %,clean-$$(BINDIR)/snell-%,$$(TARGETS))
-
