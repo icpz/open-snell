@@ -18,20 +18,24 @@ import (
     "io"
     "net"
     "time"
+
+    p "github.com/icpz/open-snell/components/utils/pool"
 )
 
 func Relay(left, right net.Conn) (el, er error) {
     ch := make(chan error)
 
     go func() {
-        buf := make([]byte, 8192)
+        buf := p.Get(p.RelayBufferSize)
         _, err := io.CopyBuffer(left, right, buf)
+        p.Put(buf)
         left.SetReadDeadline(time.Now())
         ch <- err
     }()
 
-    buf := make([]byte, 8192)
+    buf := p.Get(p.RelayBufferSize)
     _, el = io.CopyBuffer(right, left, buf)
+    p.Put(buf)
     right.SetReadDeadline(time.Now())
     er = <-ch
 

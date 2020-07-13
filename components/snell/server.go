@@ -27,6 +27,7 @@ import (
     log "github.com/golang/glog"
 
     obfs "github.com/icpz/open-snell/components/simple-obfs"
+    p "github.com/icpz/open-snell/components/utils/pool"
     "github.com/icpz/open-snell/components/utils"
     "github.com/icpz/open-snell/components/aead"
 )
@@ -182,11 +183,12 @@ func (s *SnellServer) handleSnell(conn net.Conn) {
         if isV2 {
             conn.SetReadDeadline(time.Time{})
             conn.Write([]byte{}) // write zero chunk back
-            buf := make([]byte, 8192)
+            buf := p.Get(p.RelayBufferSize)
             for el == nil {
                 _, err := conn.Read(buf)
                 el = err
             }
+            p.Put(buf)
             if !errors.Is(el, aead.ErrZeroChunk) {
                 log.Warningf("Unexpected error %s, ZERO CHUNK wanted\n", el.Error())
                 break

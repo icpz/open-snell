@@ -21,6 +21,8 @@ import (
     "math/rand"
     "net"
     "time"
+
+    p "github.com/icpz/open-snell/components/utils/pool"
 )
 
 func init() {
@@ -34,6 +36,7 @@ const (
 type TLSObfsServer struct {
     net.Conn
     buf []byte
+    offset int
     firstRequest bool
     firstResponse bool
 }
@@ -56,7 +59,7 @@ func (tos *TLSObfsServer) read(b []byte, skipSize int) (int, error) {
 
     length := (int(sizeBuf[0]) << 8) | int(sizeBuf[1])
     if length > len(b) {
-        tos.buf = make([]byte, length - len(b))
+        tos.buf = p.Get(length - len(b))
         n, err := io.ReadFull(tos.Conn, b)
         if err != nil {
             return n, err
@@ -83,11 +86,12 @@ func (tos *TLSObfsServer) skipOtherExts() error {
 
 func (tos *TLSObfsServer) Read(b []byte) (int, error) {
     if tos.buf != nil {
-        n := copy(b, tos.buf)
-        if n == len(tos.buf) {
+        n := copy(b, tos.buf[tos.offset:])
+        tos.offset += n
+        if tos.offset == len(tos.buf) {
+            p.Put(tos.buf)
             tos.buf = nil
-        } else {
-            tos.buf = tos.buf[n:]
+            tos.offset = 0
         }
         return n, nil
     }
