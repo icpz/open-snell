@@ -57,6 +57,10 @@ func init() {
         obfsType   = sec.Key("obfs").String()
         psk        = sec.Key("psk").String()
     }
+
+    if obfsType == "none" {
+        obfsType = ""
+    }
 }
 
 func main() {

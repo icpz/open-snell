@@ -75,6 +75,10 @@ func init() {
         log.Infof("Note: obfs host empty, using default bing.com\n")
         obfsHost = "bing.com"
     }
+
+    if obfsType == "none" {
+        obfsType = ""
+    }
 }
 
 func main() {
