@@ -12,6 +12,8 @@ Currently snell-server supports both v1 and v2, and snell-client only supports v
 
 + git
 
++ go 1.13+
+
 ## Build Steps
 
 Only tested on macOS.
@@ -53,7 +55,7 @@ Start the `snell-*`:
 
 # Docker image
 
-The auto-built docker image is also available at [icpz/snell-server:golang](https://hub.docker.com/r/icpz/snell-server) and [icpz/snell-client:golang](https://hub.docker.com/r/icpz/snell-client).
+The auto-built docker image is also available at [icpz/snell-server:latest](https://hub.docker.com/r/icpz/snell-server) and [icpz/snell-client:latest](https://hub.docker.com/r/icpz/snell-client).
 
 # License
 
