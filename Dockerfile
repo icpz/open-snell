@@ -11,8 +11,6 @@ RUN go mod download && make ${target} && \
 
 
 FROM scratch
-ARG target=server
-ENV target=${target}
 
 COPY --from=builder /src/build /
 ENTRYPOINT [ "/entrypoint" ]
