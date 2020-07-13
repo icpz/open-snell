@@ -33,7 +33,7 @@ const (
 
 type TLSObfsServer struct {
     net.Conn
-    remainSize int
+    buf []byte
     firstRequest bool
     firstResponse bool
 }
@@ -56,11 +56,12 @@ func (tos *TLSObfsServer) read(b []byte, skipSize int) (int, error) {
 
     length := (int(sizeBuf[0]) << 8) | int(sizeBuf[1])
     if length > len(b) {
-        n, err := tos.Conn.Read(b)
+        tos.buf = make([]byte, length - len(b))
+        n, err := io.ReadFull(tos.Conn, b)
         if err != nil {
             return n, err
         }
-        tos.remainSize = length - n
+        io.ReadFull(tos.Conn, tos.buf)
         return n, nil
     }
 
@@ -81,15 +82,14 @@ func (tos *TLSObfsServer) skipOtherExts() error {
 }
 
 func (tos *TLSObfsServer) Read(b []byte) (int, error) {
-    if tos.remainSize > 0 {
-        length := tos.remainSize
-        if length > len(b) {
-            length = len(b)
+    if tos.buf != nil {
+        n := copy(b, tos.buf)
+        if n == len(tos.buf) {
+            tos.buf = nil
+        } else {
+            tos.buf = tos.buf[n:]
         }
-
-        n, err := io.ReadFull(tos.Conn, b[:length])
-        tos.remainSize -= n
-        return n, err
+        return n, nil
     }
 
     if tos.firstRequest {
@@ -140,7 +140,6 @@ func (tos *TLSObfsServer) write(b []byte) (int, error) {
 func NewTLSObfsServer(conn net.Conn) net.Conn {
     return &TLSObfsServer {
         Conn: conn,
-        remainSize: 0,
         firstRequest: true,
         firstResponse: true,
     }
