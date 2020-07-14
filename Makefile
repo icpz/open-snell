@@ -10,10 +10,10 @@ all: $(TARGETS)
 $(BINDIR)/%: $(SRCS)
 	$(GOBUILD) -o $@ $(PKGDIR)/cmd/$(@:$(BINDIR)/%=%)
 
-clean-$(BINDIR)/%:
-	rm -f $(@:clean-%=%)
+clean/%:
+	rm -f $(@:clean/%=$(BINDIR)/%)
 
 .SECONDEXPANSION:
 $(TARGETS): $(BINDIR)/snell-$$@
 
-clean: $$(patsubst %,clean-$$(BINDIR)/snell-%,$$(TARGETS))
+clean: $$(patsubst %,clean/snell-%,$$(TARGETS))
