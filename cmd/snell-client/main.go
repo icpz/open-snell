@@ -16,7 +16,6 @@ package main
 
 import (
     "flag"
-    "net"
     "os"
     "os/signal"
     "syscall"
@@ -25,8 +24,6 @@ import (
     "gopkg.in/ini.v1"
 
     "github.com/icpz/open-snell/components/snell"
-    "github.com/icpz/open-snell/components/socks5"
-    "github.com/icpz/open-snell/components/utils"
 )
 
 var (
@@ -82,32 +79,14 @@ func init() {
 }
 
 func main() {
-    sn, err := snell.NewSnellClient(serverAddr, psk, obfsType, obfsHost)
+    sn, err := snell.NewSnellClient(listenAddr, serverAddr, obfsType, obfsHost, psk)
     if err != nil {
         log.Fatalf("Failed to initialize snell client %s\n", err.Error())
-    }
-
-    cb := func (client net.Conn, addr socks5.Addr) {
-        target, err := sn.Dial(addr.String())
-        log.V(1).Infof("New target from %s to %s\n", client.RemoteAddr().String(), addr.String())
-        if err != nil {
-            log.Warningf("Failed to connect to target %s, error %s\n", addr.String(), err.Error())
-            client.Close()
-            return
-        }
-
-        utils.Relay(client, target)
-        log.V(1).Infof("Session from %s done\n", client.RemoteAddr().String())
-    }
-
-    ls, err := socks5.NewSocksProxy(listenAddr, cb)
-    if err != nil {
-        log.Fatalf("Failed to listen on %s, error %s\n", listenAddr, err.Error())
     }
 
     sigCh := make(chan os.Signal, 1)
     signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
     <-sigCh
 
-    ls.Close()
+    sn.Close()
 }
