@@ -189,7 +189,7 @@ func (s *SnellClient) Close() {
     s.pool.Close()
 }
 
-func NewSnellClient(listen, server, obfs, obfsHost, psk string) (*SnellClient, error) {
+func NewSnellClient(listen, server, obfs, obfsHost, psk string, isV2 bool) (*SnellClient, error) {
     if obfs != "tls" && obfs != "http" && obfs != "" {
         return nil, fmt.Errorf("invalid snell obfs type %s", obfs)
     }
@@ -198,12 +198,18 @@ func NewSnellClient(listen, server, obfs, obfsHost, psk string) (*SnellClient, e
         obfsHost = "www.bing.com"
     }
 
+    var cipher aead.Cipher = nil
+    if isV2 {
+        cipher = aead.NewAES128GCM([]byte(psk))
+    } else {
+        cipher = aead.NewChacha20Poly1305([]byte(psk))
+    }
     sc := &SnellClient {
         server: server,
         obfs: obfs,
         obfsHost: obfsHost,
-        cipher: aead.NewAES128GCM([]byte(psk)),
-        isV2: true,
+        cipher: cipher,
+        isV2: isV2,
     }
 
     p, err := pool.NewChannelPool(0, maxPoolCap, sc.newSession)

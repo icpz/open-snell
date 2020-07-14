@@ -33,6 +33,7 @@ var (
     obfsType   string
     obfsHost   string
     psk        string
+    snellVer   string
 )
 
 func init() {
@@ -62,6 +63,7 @@ func init() {
         obfsType   = sec.Key("obfs").String()
         obfsHost   = sec.Key("obfs-host").String()
         psk        = sec.Key("psk").String()
+        snellVer   = sec.Key("version").String()
     }
 
     if serverAddr == "" {
@@ -76,10 +78,14 @@ func init() {
     if obfsType == "none" {
         obfsType = ""
     }
+
+    if snellVer == "" {
+        snellVer = "2"
+    }
 }
 
 func main() {
-    sn, err := snell.NewSnellClient(listenAddr, serverAddr, obfsType, obfsHost, psk)
+    sn, err := snell.NewSnellClient(listenAddr, serverAddr, obfsType, obfsHost, psk, snellVer == "2")
     if err != nil {
         log.Fatalf("Failed to initialize snell client %s\n", err.Error())
     }
