@@ -110,12 +110,7 @@ func NewSnellServer(listen, psk, obfsType string) (*SnellServer, error) {
                 }
                 continue
             }
-            switch obfsType {
-            case "tls":
-                c = obfs.NewTLSObfsServer(c)
-            case "http":
-                c = obfs.NewHTTPObfsServer(c)
-            }
+            c, _ = obfs.NewObfsServer(c, obfsType)
             c = aead.NewConnWithFallback(c, ciph, fb)
             go ss.handleSnell(c)
         }

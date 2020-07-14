@@ -19,8 +19,9 @@ import (
     "net"
     "strconv"
 
-    obfs "github.com/Dreamacro/clash/component/simple-obfs"
     "github.com/Dreamacro/clash/component/snell"
+
+    obfs "github.com/icpz/open-snell/components/simple-obfs"
 )
 
 type SnellClient struct {
@@ -31,14 +32,11 @@ type SnellClient struct {
 }
 
 func (s *SnellClient) StreamConn(c net.Conn, target string) (net.Conn, error) {
-    switch s.obfs {
-    case "tls":
-        c = obfs.NewTLSObfs(c, s.obfsHost)
-    case "http":
-        _, port, _ := net.SplitHostPort(s.server)
-        c = obfs.NewHTTPObfs(c, s.obfsHost, port)
-    }
+    _, port, _ := net.SplitHostPort(s.server)
+    c, _ = obfs.NewObfsClient(c, s.obfsHost, port, s.obfs)
+
     c = snell.StreamConn(c, s.psk)
+
     host, port, _ := net.SplitHostPort(target)
     iport, _ := strconv.Atoi(port)
     err := snell.WriteHeader(c, host, uint(iport))

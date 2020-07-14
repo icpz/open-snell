@@ -12,7 +12,7 @@
  * along with open-snell.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package obfs
+package http
 
 import (
     "bufio"

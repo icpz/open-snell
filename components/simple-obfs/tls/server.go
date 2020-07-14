@@ -12,7 +12,7 @@
  * along with open-snell.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package obfs
+package tls
 
 import (
     "bytes"
@@ -21,54 +21,20 @@ import (
     "math/rand"
     "net"
     "time"
-
-    p "github.com/icpz/open-snell/components/utils/pool"
-)
-
-func init() {
-    rand.Seed(time.Now().Unix())
-}
-
-const (
-    chunkSize = 16 * 1024
 )
 
 type TLSObfsServer struct {
     net.Conn
-    buf []byte
-    offset int
+    remain int
     firstRequest bool
+    sessionTicketDone bool
     firstResponse bool
 }
 
-// read a [length][data...] block
 func (tos *TLSObfsServer) read(b []byte, skipSize int) (int, error) {
-    if skipSize > 0 {
-        buf := make([]byte, skipSize)
-        _, err := io.ReadFull(tos.Conn, buf)
-        if err != nil {
-            return 0, err
-        }
-    }
-
-    sizeBuf := make([]byte, 2)
-    _, err := io.ReadFull(tos.Conn, sizeBuf)
-    if err != nil {
-        return 0, err
-    }
-
-    length := (int(sizeBuf[0]) << 8) | int(sizeBuf[1])
-    if length > len(b) {
-        tos.buf = p.Get(length - len(b))
-        n, err := io.ReadFull(tos.Conn, b)
-        if err != nil {
-            return n, err
-        }
-        io.ReadFull(tos.Conn, tos.buf)
-        return n, nil
-    }
-
-    return io.ReadFull(tos.Conn, b[:length])
+    r, n, err := readBlock(tos.Conn, b, skipSize)
+    tos.remain = r
+    return n, err
 }
 
 // skip SNI & other TLS extensions
@@ -85,24 +51,28 @@ func (tos *TLSObfsServer) skipOtherExts() error {
 }
 
 func (tos *TLSObfsServer) Read(b []byte) (int, error) {
-    if tos.buf != nil {
-        n := copy(b, tos.buf[tos.offset:])
-        tos.offset += n
-        if tos.offset == len(tos.buf) {
-            p.Put(tos.buf)
-            tos.buf = nil
-            tos.offset = 0
+    if tos.remain > 0 {
+        length := tos.remain
+        if length > len(b) {
+            length = len(b)
         }
-        return n, nil
+
+        n, err := io.ReadFull(tos.Conn, b[:length])
+        tos.remain -= n
+        return n, err
     }
 
     if tos.firstRequest {
         tos.firstRequest = false
-        n, err := tos.read(b, 9 * 16 - 4)
+        return tos.read(b, 9 * 16 - 4)
+    }
+
+    if !tos.sessionTicketDone {
+        tos.sessionTicketDone = true
+        err := tos.skipOtherExts()
         if err != nil {
-            return n, err
+            return 0, err
         }
-        return n, tos.skipOtherExts()
     }
 
     return tos.read(b, 3)
