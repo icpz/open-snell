@@ -4,7 +4,7 @@ An open source port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
-Currently snell-server supports both v1 and v2, and snell-client only supports v1.
+Currently server/client supports both v1 and v2.
 
 # Build
 
@@ -24,23 +24,29 @@ Only tested on macOS.
 
 make
 
+# or `make server/client' to build snell-server/snell-client separately
+
 ```
 
 The binaries are produced at `./build/snell-{server,client}`
 
 # Usage
 
-An ini file is needed:
+An ini file is needed (compatible with the offical port):
 
 ```ini
 # snell.conf
+
+# section "snell-client" is used by snell-client
 [snell-client]
 listen = 0.0.0.0:1234
 server = 1.2.3.4:5678
 psk = psk
 obfs = tls
 obfs-host = www.bing.com
+version = 1 # default 2
 
+# section "snell-server" is used by snell-client
 [snell-server]
 listen = 0.0.0.0:5678
 psk = psk
@@ -78,6 +84,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # Thanks
 
-+ [clash](https://github.com/Dreamacro/clash)
-+ [snell](https://github.com/surge-networks/snell)
++ [Dreamacro/clash](https://github.com/Dreamacro/clash)
++ [surge-networks/snell](https://github.com/surge-networks/snell)
 
