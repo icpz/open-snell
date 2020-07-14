@@ -32,18 +32,6 @@ import (
     "github.com/icpz/open-snell/components/aead"
 )
 
-const (
-    CommandPing      byte = 0
-    CommandConnect   byte = 1
-    CommandConnectV2 byte = 5
-
-    ResponseTunnel byte = 0
-    ResponsePong   byte = 1
-    ResponseError  byte = 2
-
-    Version byte = 1
-)
-
 type SnellServer struct {
     listener net.Listener
     psk []byte
@@ -127,7 +115,9 @@ func (s *SnellServer) handleSnell(conn net.Conn) {
     for isV2 {
         target, command, err := s.ServerHandshake(conn)
         if err != nil {
-            log.Warningf("Failed to handshake %s\n", err.Error())
+            if err != io.EOF {
+                log.Warningf("Failed to handshake from %s: %s\n", conn.RemoteAddr().String(), err.Error())
+            }
             break
         }
         log.V(1).Infof("New target from %s to %s\n", conn.RemoteAddr().String(), target)
@@ -177,7 +167,17 @@ func (s *SnellServer) handleSnell(conn net.Conn) {
         tc.Close()
         if isV2 {
             conn.SetReadDeadline(time.Time{})
-            conn.Write([]byte{}) // write zero chunk back
+            _, err := conn.Write([]byte{}) // write zero chunk back
+            if err != nil {
+                log.Errorf("Unexpected write error %s\n", err.Error())
+                conn.Close()
+                return
+            }
+            if e, ok := el.(*net.OpError); ok {
+                if e.Op == "write" {
+                    el = nil
+                }
+            }
             buf := p.Get(p.RelayBufferSize)
             for el == nil {
                 _, err := conn.Read(buf)
