@@ -20,10 +20,7 @@ import (
     "net"
 
     log "github.com/golang/glog"
-    "github.com/Dreamacro/clash/component/socks5"
 )
-
-type Addr = socks5.Addr
 
 type SocksCallback func(net.Conn, Addr)
 
@@ -68,7 +65,7 @@ func (l *SockListener) Address() string {
 }
 
 func handleSocks(conn net.Conn, cb SocksCallback) {
-    target, command, err := socks5.ServerHandshake(conn, nil)
+    target, command, err := ServerHandshake(conn)
     if err != nil {
         conn.Close()
         return
@@ -76,7 +73,7 @@ func handleSocks(conn net.Conn, cb SocksCallback) {
     if c, ok := conn.(*net.TCPConn); ok {
         c.SetKeepAlive(true)
     }
-    if command == socks5.CmdUDPAssociate {
+    if command == CmdUDPAssociate {
         defer conn.Close()
         io.Copy(ioutil.Discard, conn)
         return
