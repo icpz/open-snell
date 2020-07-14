@@ -80,7 +80,7 @@ func (s *clientSession) Read(b []byte) (int, error) {
         return 0, err
     }
 
-    return 0, errors.New(string(msg))
+    return 0, NewAppError(0, string(msg))
 }
 
 func WriteHeader(conn net.Conn, host string, port uint, v2 bool) error {
@@ -247,8 +247,13 @@ func (s *SnellClient) handleSnell(client net.Conn, addr socks5.Addr) {
             s.DropSession(target)
             return
         }
-        if e, ok := er.(*net.OpError); ok {
+        switch e := er.(type) {
+        case *net.OpError:
             if e.Op == "write" {
+                log.V(1).Infof("Ignored write error %s\n", e.Error())
+                er = nil
+            } else if ae, ok := e.Unwrap().(*AppError); ok {
+                log.Errorf("Server reported error: %s\n", ae.Error())
                 er = nil
             }
         }

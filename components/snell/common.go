@@ -25,3 +25,19 @@ const (
 
     Version byte = 1
 )
+
+type AppError struct {
+    code byte
+    msg string
+}
+
+func (e *AppError) Error() string {
+    return e.msg
+}
+
+func NewAppError(code byte, msg string) error {
+    return &AppError{
+        code: code,
+        msg:  msg,
+    }
+}

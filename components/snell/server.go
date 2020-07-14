@@ -139,6 +139,7 @@ func (s *SnellServer) handleSnell(conn net.Conn) {
             break
         }
 
+        var el error = nil
         tc, err := net.Dial("tcp", target)
         if err != nil {
             buf := bytes.NewBuffer([]byte{})
@@ -154,17 +155,13 @@ func (s *SnellServer) handleSnell(conn net.Conn) {
             }
             buf.WriteByte(byte(len(es)))
             buf.WriteString(es)
-            conn.Write(buf.Bytes())
-            if isV2 {
-                conn.Write([]byte{})
-            }
-            continue
+            _, el = conn.Write(buf.Bytes())
+        } else {
+            conn.Write([]byte{ResponseTunnel})
+            el, _ = utils.Relay(conn, tc)
+            tc.Close()
         }
 
-        conn.Write([]byte{ResponseTunnel})
-        el, _ := utils.Relay(conn, tc)
-
-        tc.Close()
         if isV2 {
             conn.SetReadDeadline(time.Time{})
             _, err := conn.Write([]byte{}) // write zero chunk back
