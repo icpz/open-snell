@@ -26,7 +26,6 @@ import (
     "time"
 
     log "github.com/golang/glog"
-    "gopkg.in/fatih/pool.v2"
 
     obfs "github.com/icpz/open-snell/components/simple-obfs"
     p "github.com/icpz/open-snell/components/utils/pool"
@@ -36,7 +35,8 @@ import (
 )
 
 const (
-    maxPoolCap = 65536
+    MaxPoolCap    = 10
+    PoolTimeoutMS = 150000
 )
 
 var (
@@ -116,7 +116,7 @@ type SnellClient struct {
     cipher aead.Cipher
     socks5 *socks5.SockListener
     isV2 bool
-    pool pool.Pool
+    pool *snellPool
 }
 
 func (s *SnellClient) StreamConn(c net.Conn, target string) (net.Conn, error) {
@@ -161,7 +161,7 @@ func (s *SnellClient) GetSession(target string) (net.Conn, error) {
 }
 
 func (s *SnellClient) PutSession(c net.Conn) {
-    if pc, ok := c.(*pool.PoolConn); ok {
+    if pc, ok := c.(*snellPoolConn); ok {
         pc.Conn.(*clientSession).reply = false
     } else {
         log.Fatalf("Invalid session type!")
@@ -176,7 +176,7 @@ func (s *SnellClient) PutSession(c net.Conn) {
 }
 
 func (s *SnellClient) DropSession(c net.Conn) {
-    if sess, ok := c.(*pool.PoolConn); ok {
+    if sess, ok := c.(*snellPoolConn); ok {
         sess.MarkUnusable()
         sess.Close()
     } else {
@@ -212,7 +212,7 @@ func NewSnellClient(listen, server, obfs, obfsHost, psk string, isV2 bool) (*Sne
         isV2: isV2,
     }
 
-    p, err := pool.NewChannelPool(0, maxPoolCap, sc.newSession)
+    p, err := newSnellPool(MaxPoolCap, PoolTimeoutMS, sc.newSession)
     if err != nil {
         return nil, err
     }
