@@ -7,7 +7,7 @@ SRCS := $(shell find $(PKGDIR) -name '*.go')
 
 all: $(TARGETS)
 
-$(BINDIR)/%: $(SRCS)
+$(BINDIR)/%: $(SRCS) go.mod go.sum
 	$(GOBUILD) -o $@ $(PKGDIR)/cmd/$(@:$(BINDIR)/%=%)
 
 clean/%:

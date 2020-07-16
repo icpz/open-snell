@@ -72,7 +72,7 @@ func newSnellPool(maxSize, leaseMS int, factory snellFactory) (*snellPool, error
             }
             return c
         },
-        pool.OptMaxSize(maxSize),
+        pool.OptCapacity(maxSize),
         pool.OptLeaseMS(int64(leaseMS)),
         pool.OptDeleter(func (i interface{}) {
             if c, ok := i.(net.Conn); ok {
