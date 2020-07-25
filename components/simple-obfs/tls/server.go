@@ -102,13 +102,17 @@ func (tos *TLSObfsServer) write(b []byte) (int, error) {
         return len(b), err
     }
 
-    length := uint16(len(b))
-    buf := bytes.Buffer{}
+    buf := bufferPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    defer bufferPool.Put(buf)
+
     buf.Write([]byte{0x17, 0x03, 0x03})
-    buf.Write([]byte{byte(length >> 8), byte(length & 0xff)})
-    buf.Write(b)
+    binary.Write(buf, binary.BigEndian, uint16(len(b)))
     _, err := tos.Conn.Write(buf.Bytes())
-    return len(b), err
+    if err != nil {
+        return 0, err
+    }
+    return tos.Conn.Write(b)
 }
 
 func NewTLSObfsServer(conn net.Conn) net.Conn {
@@ -126,7 +130,10 @@ func makeServerHello(data []byte) []byte {
     rand.Read(randBytes)
     rand.Read(sessionId)
 
-    buf := &bytes.Buffer{}
+    buf := bufferPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    defer bufferPool.Put(buf)
+
     buf.WriteByte(0x16)
     binary.Write(buf, binary.BigEndian, uint16(0x0301))
     binary.Write(buf, binary.BigEndian, uint16(91))

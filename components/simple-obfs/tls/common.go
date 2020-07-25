@@ -15,9 +15,11 @@
 package tls
 
 import (
+    "bytes"
     "io"
     "math/rand"
     "net"
+    "sync"
     "time"
 
     p "github.com/icpz/open-snell/components/utils/pool"
@@ -30,6 +32,8 @@ func init() {
 const (
     chunkSize = 16 * 1024
 )
+
+var bufferPool = sync.Pool{New: func() interface{} { return &bytes.Buffer{} }}
 
 // read a [length][data...] block
 func readBlock(c net.Conn, b []byte, skipSize int) (remain, n int, err error) {

@@ -72,12 +72,17 @@ func (to *TLSObfsClient) write(b []byte) (int, error) {
         return len(b), err
     }
 
-    buf := &bytes.Buffer{}
+    buf := bufferPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    defer bufferPool.Put(buf)
+
     buf.Write([]byte{0x17, 0x03, 0x03})
     binary.Write(buf, binary.BigEndian, uint16(len(b)))
-    buf.Write(b)
     _, err := to.Conn.Write(buf.Bytes())
-    return len(b), err
+    if err != nil {
+        return 0, err
+    }
+    return to.Conn.Write(b)
 }
 
 // NewTLSObfsClient return a SimpleObfs
@@ -96,7 +101,9 @@ func makeClientHelloMsg(data []byte, server string) []byte {
     rand.Read(random)
     rand.Read(sessionID)
 
-    buf := &bytes.Buffer{}
+    buf := bufferPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    defer bufferPool.Put(buf)
 
     // handshake, TLS 1.0 version, length
     buf.WriteByte(22)
