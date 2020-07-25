@@ -139,9 +139,9 @@ func (r *reader) read() (int, error) {
         _, err = r.Open(buf[:0], r.nonce, tbuf, nil)
         if err != nil {
             r.AEAD = r.fallback
-            r.fallback = nil
             _, err = r.Open(buf[:0], r.nonce, tbuf, nil)
         }
+        r.fallback = nil
     } else {
         _, err = r.Open(buf[:0], r.nonce, buf, nil)
     }
