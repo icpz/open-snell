@@ -15,29 +15,29 @@
 package snell
 
 const (
-    CommandPing      byte = 0
-    CommandConnect   byte = 1
-    CommandConnectV2 byte = 5
+	CommandPing      byte = 0
+	CommandConnect   byte = 1
+	CommandConnectV2 byte = 5
 
-    ResponseTunnel byte = 0
-    ResponsePong   byte = 1
-    ResponseError  byte = 2
+	ResponseTunnel byte = 0
+	ResponsePong   byte = 1
+	ResponseError  byte = 2
 
-    Version byte = 1
+	Version byte = 1
 )
 
 type AppError struct {
-    code byte
-    msg string
+	code byte
+	msg  string
 }
 
 func (e *AppError) Error() string {
-    return e.msg
+	return e.msg
 }
 
 func NewAppError(code byte, msg string) error {
-    return &AppError{
-        code: code,
-        msg:  msg,
-    }
+	return &AppError{
+		code: code,
+		msg:  msg,
+	}
 }

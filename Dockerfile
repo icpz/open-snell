@@ -1,5 +1,5 @@
 
-FROM golang:alpine as builder
+FROM golang:alpine AS builder
 ARG target=server
 ENV target=${target}
 

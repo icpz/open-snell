@@ -15,36 +15,36 @@
 package utils
 
 import (
-    "io"
-    "net"
-    "time"
+	"io"
+	"net"
+	"time"
 
-    p "github.com/icpz/open-snell/components/utils/pool"
+	p "github.com/icpz/open-snell/components/utils/pool"
 )
 
 func Relay(left, right net.Conn) (el, er error) {
-    ch := make(chan error)
+	ch := make(chan error)
 
-    go func() {
-        buf := p.Get(p.RelayBufferSize)
-        _, err := io.CopyBuffer(left, right, buf)
-        p.Put(buf)
-        left.SetReadDeadline(time.Now())
-        ch <- err
-    }()
+	go func() {
+		buf := p.Get(p.RelayBufferSize)
+		_, err := io.CopyBuffer(left, right, buf)
+		p.Put(buf)
+		left.SetReadDeadline(time.Now())
+		ch <- err
+	}()
 
-    buf := p.Get(p.RelayBufferSize)
-    _, el = io.CopyBuffer(right, left, buf)
-    p.Put(buf)
-    right.SetReadDeadline(time.Now())
-    er = <-ch
+	buf := p.Get(p.RelayBufferSize)
+	_, el = io.CopyBuffer(right, left, buf)
+	p.Put(buf)
+	right.SetReadDeadline(time.Now())
+	er = <-ch
 
-    if err, ok := el.(net.Error); ok && err.Timeout() {
-        el = nil
-    }
-    if err, ok := er.(net.Error); ok && err.Timeout() {
-        er = nil
-    }
+	if err, ok := el.(net.Error); ok && err.Timeout() {
+		el = nil
+	}
+	if err, ok := er.(net.Error); ok && err.Timeout() {
+		er = nil
+	}
 
-    return
+	return
 }

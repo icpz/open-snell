@@ -15,50 +15,50 @@
 package tls
 
 import (
-    "bytes"
-    "io"
-    "math/rand"
-    "net"
-    "sync"
-    "time"
+	"bytes"
+	"io"
+	"math/rand"
+	"net"
+	"sync"
+	"time"
 
-    p "github.com/icpz/open-snell/components/utils/pool"
+	p "github.com/icpz/open-snell/components/utils/pool"
 )
 
 func init() {
-    rand.Seed(time.Now().Unix())
+	rand.Seed(time.Now().Unix())
 }
 
 const (
-    chunkSize = 16 * 1024
+	chunkSize = 16 * 1024
 )
 
 var bufferPool = sync.Pool{New: func() interface{} { return &bytes.Buffer{} }}
 
 // read a [length][data...] block
 func readBlock(c net.Conn, b []byte, skipSize int) (remain, n int, err error) {
-    if skipSize > 0 {
-        buf := p.Get(skipSize)
-        _, err = io.ReadFull(c, buf)
-        p.Put(buf)
-        if err != nil {
-            return
-        }
-    }
+	if skipSize > 0 {
+		buf := p.Get(skipSize)
+		_, err = io.ReadFull(c, buf)
+		p.Put(buf)
+		if err != nil {
+			return
+		}
+	}
 
-    sizeBuf := make([]byte, 2)
-    _, err = io.ReadFull(c, sizeBuf)
-    if err != nil {
-        return
-    }
+	sizeBuf := make([]byte, 2)
+	_, err = io.ReadFull(c, sizeBuf)
+	if err != nil {
+		return
+	}
 
-    length := (int(sizeBuf[0]) << 8) | int(sizeBuf[1])
-    if length > len(b) {
-        n, err = c.Read(b)
-        remain = length - n
-        return
-    }
+	length := (int(sizeBuf[0]) << 8) | int(sizeBuf[1])
+	if length > len(b) {
+		n, err = c.Read(b)
+		remain = length - n
+		return
+	}
 
-    n, err = io.ReadFull(c, b[:length])
-    return
+	n, err = io.ReadFull(c, b[:length])
+	return
 }
