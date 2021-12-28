@@ -18,8 +18,12 @@ const (
 	CommandPing      byte = 0
 	CommandConnect   byte = 1
 	CommandConnectV2 byte = 5
+	CommandUDP       byte = 6
+
+	CommandUDPForward byte = 1
 
 	ResponseTunnel byte = 0
+	ResponseReady  byte = 0
 	ResponsePong   byte = 1
 	ResponseError  byte = 2
 
