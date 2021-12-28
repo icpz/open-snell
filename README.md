@@ -4,7 +4,7 @@ An open source port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
-Currently server/client supports both v1 and v2.
+Currently server/client supports both v1 and v2, only server supports v3.
 
 # Build
 
@@ -12,7 +12,7 @@ Currently server/client supports both v1 and v2.
 
 + git
 
-+ go 1.13+
++ go 1.17+
 
 ## Build Steps
 
@@ -66,7 +66,7 @@ The auto-built docker image is also available at [icpz/snell-server:latest](http
 # License
 
 ```
-Copyright (C) 2020-, icpz <cc@icpz.dev>
+Copyright (C) 2020-, icpz <y@icpz.dev>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
