@@ -44,8 +44,8 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm/v7,linux/arm64
           push: true
-          build-args:
-            - target=server
+          build-args: |
+            target=server
           tags: 'icpz/snell-server:latest,ghcr.io/icpz/snell-server:latest'
 
       - name: Build client and push
@@ -54,7 +54,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm/v7,linux/arm64
           push: true
-          build-args:
-            - target=client
+          build-args: |
+            target=client
           tags: 'icpz/snell-client:latest,ghcr.io/icpz/snell-client:latest'
 
