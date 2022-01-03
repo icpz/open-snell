@@ -61,7 +61,7 @@ Start the `snell-*`:
 
 # Docker image
 
-The auto-built docker image is also available at [icpz/snell-server:latest](https://hub.docker.com/r/icpz/snell-server) and [icpz/snell-client:latest](https://hub.docker.com/r/icpz/snell-client).
+The auto-built docker image is also available at [ghcr.io/icpz/snell-server:latest](https://github.com/icpz/open-snell/pkgs/container/snell-server) and [ghcr.io/icpz/snell-client:latest](https://github.com/icpz/open-snell/pkgs/container/snell-client).
 
 # License
 
