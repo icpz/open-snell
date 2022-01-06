@@ -1,6 +1,0 @@
-#!/bin/bash
-
-SN_TARGET="${SN_TARGET:-server}"
-
-docker build --build-arg "target=${SN_TARGET}" -f "$DOCKERFILE_PATH" -t "$IMAGE_NAME" .
-
