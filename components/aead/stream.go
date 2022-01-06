@@ -104,6 +104,7 @@ type reader struct {
 	buf      []byte
 	leftover []byte
 	fallback cipher.AEAD
+	switched bool
 }
 
 // NewReader wraps an io.Reader with AEAD decryption.
@@ -138,9 +139,10 @@ func (r *reader) read() (int, error) {
 		_, err = r.Open(buf[:0], r.nonce, tbuf, nil)
 		if err != nil {
 			r.AEAD = r.fallback
-			r.fallback = nil
+			r.switched = true
 			_, err = r.Open(buf[:0], r.nonce, tbuf, nil)
 		}
+		r.fallback = nil
 	} else {
 		_, err = r.Open(buf[:0], r.nonce, buf, nil)
 	}
@@ -268,7 +270,7 @@ func (c *streamConn) Read(b []byte) (int, error) {
 			return 0, err
 		}
 		n, err := c.r.Read(b)
-		if c.fallback != nil && c.r.fallback == nil { // cipher switched
+		if c.r.switched { // cipher switched
 			c.Cipher = c.fallback
 			c.fallback = nil
 		}
@@ -283,7 +285,7 @@ func (c *streamConn) WriteTo(w io.Writer) (int64, error) {
 			return 0, err
 		}
 		n, err := c.r.WriteTo(w)
-		if c.fallback != nil && c.r.fallback == nil { // cipher switched
+		if c.r.switched { // cipher switched
 			c.Cipher = c.fallback
 			c.fallback = nil
 		}
