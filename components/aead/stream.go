@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 )
 
 const payloadSizeMask = 0x3FFF // 16*1024 - 1
@@ -32,6 +33,7 @@ type writer struct {
 	cipher.AEAD
 	nonce []byte
 	buf   []byte
+	mux   sync.Mutex
 }
 
 func NewWriter(w io.Writer, aead cipher.AEAD) io.Writer { return newWriter(w, aead) }
@@ -47,6 +49,9 @@ func newWriter(w io.Writer, aead cipher.AEAD) *writer {
 
 func (w *writer) Write(b []byte) (int, error) {
 	if len(b) == 0 { // zero chunk
+		w.mux.Lock()
+		defer w.mux.Unlock()
+
 		buf := w.buf
 		buf = buf[:2+w.Overhead()]
 
@@ -63,6 +68,9 @@ func (w *writer) Write(b []byte) (int, error) {
 }
 
 func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
+	w.mux.Lock()
+	defer w.mux.Unlock()
+
 	for {
 		buf := w.buf
 		payloadBuf := buf[2+w.Overhead() : 2+w.Overhead()+payloadSizeMask]
@@ -105,6 +113,7 @@ type reader struct {
 	leftover []byte
 	fallback cipher.AEAD
 	switched bool
+	mux      sync.Mutex
 }
 
 // NewReader wraps an io.Reader with AEAD decryption.
@@ -175,6 +184,9 @@ func (r *reader) read() (int, error) {
 
 // Read reads from the embedded io.Reader, decrypts and writes to b.
 func (r *reader) Read(b []byte) (int, error) {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+
 	// copy decrypted bytes (if any) from previous record first
 	if len(r.leftover) > 0 {
 		n := copy(b, r.leftover)
@@ -194,6 +206,9 @@ func (r *reader) Read(b []byte) (int, error) {
 // there's no more data to write or when an error occurs. Return number of
 // bytes written to w and any error encountered.
 func (r *reader) WriteTo(w io.Writer) (n int64, err error) {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+
 	// write decrypted bytes left over from previous record
 	for len(r.leftover) > 0 {
 		nw, ew := w.Write(r.leftover)
