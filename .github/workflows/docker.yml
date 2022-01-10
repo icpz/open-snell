@@ -21,7 +21,6 @@ jobs:
 
       - name: Prepare version
         run: |
-          apt update && apt install -y --no-install-recommands make
           echo "OPEN_SNELL_VERSION=$(make version)" >> "${GITHUB_ENV}"
 
       - name: Set up QEMU
