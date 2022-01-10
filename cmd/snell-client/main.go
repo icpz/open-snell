@@ -83,7 +83,7 @@ func init() {
 		obfsHost = "bing.com"
 	}
 
-	if obfsType == "none" {
+	if obfsType == "none" || obfsType == "off" {
 		obfsType = ""
 	}
 

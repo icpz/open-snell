@@ -66,7 +66,7 @@ func init() {
 		psk = sec.Key("psk").String()
 	}
 
-	if obfsType == "none" {
+	if obfsType == "none" || obfsType == "off" {
 		obfsType = ""
 	}
 }
