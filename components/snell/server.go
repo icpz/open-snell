@@ -25,6 +25,7 @@ import (
 	"time"
 
 	log "github.com/golang/glog"
+	lru "github.com/hashicorp/golang-lru"
 
 	"github.com/icpz/open-snell/components/aead"
 	obfs "github.com/icpz/open-snell/components/simple-obfs"
@@ -218,6 +219,14 @@ func (s *SnellServer) writeError(conn net.Conn, err error) error {
 
 func (s *SnellServer) handleUDPRequest(conn net.Conn) {
 	log.V(1).Infof("New UDP request from %s\n", conn.RemoteAddr().String())
+
+	cache, err := lru.New(256)
+	if err != nil {
+		log.Errorf("UDP failed to create lru cache: %v\n", err)
+		return
+	}
+	defer cache.Purge()
+
 	pc, err := net.ListenPacket("udp", "0.0.0.0:0")
 	if err != nil {
 		log.Errorf("UDP failed to listen: %v\n", err)
@@ -294,12 +303,19 @@ uotLoop:
 		target := net.JoinHostPort(host, strconv.Itoa(port))
 		log.V(1).Infof("UDP over TCP forwarding to %s\n", target)
 
-		uaddr, err := net.ResolveUDPAddr("udp", target)
-		if err != nil {
-			log.Warningf("UDP over TCP failed to resolve %s: %v\n", target, err)
-			/* won't close connection, but cause this packet losses */
+		var uaddr *net.UDPAddr
+		if value, ok := cache.Get(target); ok {
+			uaddr = value.(*net.UDPAddr)
+			log.V(1).Infof("UDP cache hit: %s -> %s\n", target, uaddr.String())
+		} else {
+			uaddr, err = net.ResolveUDPAddr("udp", target)
+			if err != nil {
+				log.Warningf("UDP over TCP failed to resolve %s: %v\n", target, err)
+				/* won't close connection, but cause this packet losses */
+			}
+			log.V(1).Infof("UDP over TCP resolved target %s -> %s\n", target, uaddr.String())
+			cache.Add(target, uaddr)
 		}
-		log.V(1).Infof("UDP over TCP resolved target %s -> %s\n", target, uaddr.String())
 
 		payloadSize := n - head
 		if payloadSize > 0 {
