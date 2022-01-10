@@ -1,6 +1,6 @@
 BINDIR=build
 PKGDIR=$(CURDIR)
-VERSION=$(shell git describe --tags --dirty --always)
+VERSION=$(shell git describe --tags --dirty --always || echo "unknown version")
 GOOS=$(shell go env GOOS)
 GOARCH=$(shell go env GOARCH)
 GOBUILD=GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -trimpath -ldflags '-X "github.com/icpz/open-snell/constants.Version=$(VERSION)" -w -s'
