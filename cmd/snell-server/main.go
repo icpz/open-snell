@@ -24,6 +24,7 @@ import (
 	"gopkg.in/ini.v1"
 
 	"github.com/icpz/open-snell/components/snell"
+	"github.com/icpz/open-snell/constants"
 )
 
 var (
@@ -31,6 +32,7 @@ var (
 	listenAddr string
 	obfsType   string
 	psk        string
+	version    bool
 )
 
 func init() {
@@ -38,9 +40,15 @@ func init() {
 	flag.StringVar(&listenAddr, "l", "0.0.0.0:18888", "server listen address")
 	flag.StringVar(&obfsType, "obfs", "", "obfs type")
 	flag.StringVar(&psk, "k", "", "pre-shared key")
+	flag.BoolVar(&version, "version", false, "show open-snell version")
 
 	flag.Parse()
 	flag.Set("logtostderr", "true")
+
+	if version {
+		log.Infof("Open-snell version: %s\n", constants.Version)
+		os.Exit(0)
+	}
 
 	if configFile != "" {
 		log.Infof("Configuration file specified, ignoring other flags\n")
