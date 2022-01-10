@@ -50,8 +50,8 @@ func init() {
 	flag.Parse()
 	flag.Set("logtostderr", "true")
 
+	log.Infof("Open-snell client, version: %s\n", constants.Version)
 	if version {
-		log.Infof("Open-snell version: %s\n", constants.Version)
 		os.Exit(0)
 	}
 
