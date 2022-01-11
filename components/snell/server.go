@@ -126,7 +126,7 @@ muxLoop:
 		target, command, err := s.ServerHandshake(conn)
 		if err != nil {
 			if err != io.EOF {
-				log.Warningf("Failed to handshake from %s: %s\n", conn.RemoteAddr().String(), err.Error())
+				log.Warningf("Failed to handshake from %s: %v\n", conn.RemoteAddr().String(), err)
 			}
 			break
 		}
@@ -175,7 +175,7 @@ muxLoop:
 			conn.SetReadDeadline(time.Time{})
 			_, err := conn.Write([]byte{}) // write zero chunk back
 			if err != nil {
-				log.Errorf("Unexpected write error %s\n", err.Error())
+				log.Errorf("Unexpected write error %v\n", err)
 				return
 			}
 			if e, ok := el.(*net.OpError); ok {
@@ -190,7 +190,10 @@ muxLoop:
 			}
 			p.Put(buf)
 			if !errors.Is(el, aead.ErrZeroChunk) {
-				log.Warningf("Unexpected error %s, ZERO CHUNK wanted\n", el.Error())
+				if !errors.Is(el, io.EOF) {
+					log.Warningf("Unexpected error %v, ZERO CHUNK wanted\n", el)
+				}
+				log.V(1).Infof("Close connection due to %v anyway\n", el)
 				break
 			}
 		}

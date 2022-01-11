@@ -231,7 +231,7 @@ func (s *SnellClient) handleSnell(client net.Conn, addr socks5.Addr) {
 	target, err := s.GetSession(addr.String())
 	log.V(1).Infof("New target from %s to %s\n", client.RemoteAddr().String(), addr.String())
 	if err != nil {
-		log.Warningf("Failed to connect to target %s, error %s\n", addr.String(), err.Error())
+		log.Warningf("Failed to connect to target %s, error %v\n", addr.String(), err)
 		client.Close()
 		return
 	}
@@ -243,17 +243,17 @@ func (s *SnellClient) handleSnell(client net.Conn, addr socks5.Addr) {
 		target.SetReadDeadline(time.Time{})
 		_, err := target.Write([]byte{}) // write zero chunk back
 		if err != nil {
-			log.Errorf("Unexpected write error %s\n", err.Error())
+			log.Errorf("Unexpected write error %v\n", err)
 			s.DropSession(target)
 			return
 		}
 		switch e := er.(type) {
 		case *net.OpError:
 			if e.Op == "write" {
-				log.V(1).Infof("Ignored write error %s\n", e.Error())
+				log.V(1).Infof("Ignored write error %v\n", e)
 				er = nil
 			} else if ae, ok := e.Unwrap().(*AppError); ok {
-				log.Errorf("Server reported error: %s\n", ae.Error())
+				log.Errorf("Server reported error: %v\n", ae)
 				er = nil
 			}
 		}
@@ -264,7 +264,7 @@ func (s *SnellClient) handleSnell(client net.Conn, addr socks5.Addr) {
 		}
 		p.Put(buf)
 		if !errors.Is(er, aead.ErrZeroChunk) {
-			log.Warningf("Unexpected error %s, ZERO CHUNK wanted\n", er.Error())
+			log.Warningf("Unexpected error %v, ZERO CHUNK wanted\n", er)
 			s.DropSession(target)
 			return
 		}

@@ -59,7 +59,7 @@ func init() {
 		log.Infof("Configuration file specified, ignoring other flags\n")
 		cfg, err := ini.Load(configFile)
 		if err != nil {
-			log.Fatalf("Failed to load config file %s, %s\n", configFile, err.Error())
+			log.Fatalf("Failed to load config file %s, %v\n", configFile, err)
 		}
 		sec, err := cfg.GetSection("snell-client")
 		if err != nil {
@@ -95,7 +95,7 @@ func init() {
 func main() {
 	sn, err := snell.NewSnellClient(listenAddr, serverAddr, obfsType, obfsHost, psk, snellVer == "2")
 	if err != nil {
-		log.Fatalf("Failed to initialize snell client %s\n", err.Error())
+		log.Fatalf("Failed to initialize snell client %v\n", err)
 	}
 
 	sigCh := make(chan os.Signal, 1)
