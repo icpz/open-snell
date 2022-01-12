@@ -4,7 +4,11 @@ An open source port of [snell](https://github.com/surge-networks/snell)
 
 # Features
 
-Currently server/client supports both v1 and v2, only server supports v3.
++ `snell-server`: v1, v2, v3
+
++ `snell-client`: v1, v2
+
+**snell-client is bug-fix-only, please consider [clash](https://github.com/Dreamacro/clash) for full feature opensource snell client**
 
 # Build
 
