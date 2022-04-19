@@ -92,6 +92,7 @@ func NewSnellServer(listen, psk, obfsType string) (*SnellServer, error) {
 	if err != nil {
 		return nil, err
 	}
+	setTcpFastOpen(l, 1)
 
 	bpsk := []byte(psk)
 	ss := &SnellServer{l, bpsk, false}
